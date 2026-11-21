@@ -24,7 +24,7 @@ jobs:
           curl -sSL --retry 3 -o es.zip https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip
           unzip -q es.zip
           mv vosk-model-small-es-0.42 model
-          tar czf app/src/main/assets/www/model.tar.gz model
+          tar czf app/src/main/assets/www/model.tgz model
           ls -la app/src/main/assets/www/
 
       - uses: actions/setup-java@v4

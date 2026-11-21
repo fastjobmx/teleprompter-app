@@ -25,7 +25,7 @@ android {
 
     androidResources {
         // El modelo de voz ya viene comprimido
-        noCompress += ['gz']
+        noCompress += ['tgz']
     }
 
     lint {

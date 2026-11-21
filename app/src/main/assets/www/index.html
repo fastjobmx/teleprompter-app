@@ -334,7 +334,7 @@ async function startVoice(){
   voiceReady=false;$("vst").classList.add("on");$("vtx").textContent="Cargando voz…";
   try{
     await loadScript("vosk.js");
-    if(!model){const r=await fetch("model.tar.gz");if(!r.ok)throw new Error("Falta el modelo de voz");
+    if(!model){const r=await fetch("model.tgz");if(!r.ok)throw new Error("Falta el modelo de voz");
       const url=URL.createObjectURL(await r.blob());model=await Vosk.createModel(url)}
     const vocab=[...new Set(W.map(gword).filter(Boolean))];vocab.push("[unk]");
     recog=new model.KaldiRecognizer(sr,JSON.stringify(vocab));vT0=fed/sr;recog.setWords(true);
