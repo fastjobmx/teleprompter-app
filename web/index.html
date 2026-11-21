@@ -456,7 +456,7 @@ function srt(cs){const f=x=>{const ms=Math.round(x*1000),h=Math.floor(ms/3600000
 function updateEditInfo(){
   if(!$("rv").classList.contains("on"))return;
   segs=silenceCuts(parseFloat(S.silLvl));const kept=segs.reduce((a,k)=>a+k[1]-k[0],0);const n=segs.length?Math.max(0,segs.length-1)+(segs[0][0]>0.1?1:0)+(segs[segs.length-1][1]<recDur-0.1?1:0):0;
-  $("silInfo").textContent=levels.length?(n?`Se quitan ${n} pausas: el video pasa de ${fmt(recDur)} a ${fmt(kept)}.`:"No encontré pausas largas para cortar."):"No hay datos de audio para detectar pausas.";
+  $("silInfo").textContent=levels.length?(n?`Se ${n===1?"quita 1 pausa":"quitan "+n+" pausas"}: el video pasa de ${fmt(recDur)} a ${fmt(kept)}.`:"No encontré pausas largas para cortar."):"No hay datos de audio para detectar pausas.";
   $("capInfo").textContent=cues.length?`${cues.length} subtítulos generados a partir de tu voz.`:"Graba en modo «Sigue mi voz» para generar subtítulos automáticamente.";
   ["xCap","capSty","capPos","srtBtn","srtCopy"].forEach(k=>$(k).disabled=!cues.length);
   $("cap").className=S.capPos==="top"?"top":S.capPos==="mid"?"mid":"";
