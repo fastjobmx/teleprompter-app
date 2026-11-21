@@ -1,0 +1,53 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copiar la app web al APK
+        run: |
+          mkdir -p app/src/main/assets/www
+          cp web/index.html web/manifest.webmanifest web/icon-*.png app/src/main/assets/www/
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Compilar
+        run: gradle assembleDebug --no-daemon
+
+      - name: Renombrar APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk Teleprompter.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Teleprompter-apk
+          path: Teleprompter.apk
+
+      - name: Publicar descarga
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Teleprompter 1.0.${{ github.run_number }}
+          body: |
+            Descarga **Teleprompter.apk** desde el celular e instálalo.
+            Android pedirá permitir "instalar apps de fuentes desconocidas" para tu navegador la primera vez.
+          files: Teleprompter.apk
+          make_latest: true
