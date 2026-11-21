@@ -14,3 +14,15 @@ Los videos se guardan en **Galería › Movies/Teleprompter**.
 - `web/` — la app (HTML). También funciona como app web instalable (PWA) si la subes a Netlify.
 - `app/` — envoltorio Android (WebView) con permisos de cámara y guardado en galería.
 - `.github/workflows/build-apk.yml` — compila el APK en cada cambio a `main` y lo publica en Releases.
+
+## Funciones (v2)
+
+- **Sigue mi voz**: el texto avanza cuando hablas y se detiene en las pausas. Reconocimiento en español 100 % en el celular (Vosk), sin internet.
+- **Ventana de texto ajustable**: tamaño, color, interlineado, posición, alto, ancho, oscuridad del fondo y línea de lectura. Se arrastra desde su borde.
+- **Subtítulos automáticos**: se generan mientras grabas en modo voz, usando las palabras exactas de tu guion. Se exportan dentro del video o como `.srt`.
+- **Quitar silencios**: corta las pausas (suave, normal o agresivo) al exportar.
+
+## Créditos
+
+- [Vosk](https://alphacephei.com/vosk/) y [vosk-browser](https://github.com/ccoreilly/vosk-browser) (Apache 2.0) para el reconocimiento de voz.
+- Ideas de [smart-teleprompter-android](https://github.com/xdadrm/smart-teleprompter-android) (filtro de ruido), [CueCam](https://github.com/lustsazeus-lab/CueCam) y [OpenCut Mobile](https://github.com/Inexra/opencut-mobile) (exportación con Media3).

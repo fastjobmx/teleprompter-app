@@ -17,38 +17,49 @@ jobs:
       - name: Copiar la app web al APK
         run: |
           mkdir -p app/src/main/assets/www
-          cp web/index.html web/manifest.webmanifest web/icon-*.png app/src/main/assets/www/
+          cp web/index.html web/manifest.webmanifest web/icon-*.png web/vosk.js app/src/main/assets/www/
+
+      - name: Descargar modelo de voz en español (Vosk, sin internet)
+        run: |
+          curl -sSL --retry 3 -o es.zip https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip
+          unzip -q es.zip
+          mv vosk-model-small-es-0.42 model
+          tar czf app/src/main/assets/www/model.tar.gz model
+          ls -la app/src/main/assets/www/
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Verificar Android SDK
-        run: echo "SDK en $ANDROID_HOME" && ls $ANDROID_HOME/platforms
-
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.13'
 
       - name: Compilar
-        run: gradle assembleDebug --no-daemon
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
 
       - name: Renombrar APK
         run: cp app/build/outputs/apk/debug/app-debug.apk Teleprompter.apk
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Teleprompter-apk
-          path: Teleprompter.apk
-
       - name: Publicar descarga
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Teleprompter 1.0.${{ github.run_number }}
+          tag_name: v2.0.${{ github.run_number }}
+          name: Teleprompter 2.0.${{ github.run_number }}
           body: |
             Descarga **Teleprompter.apk** desde el celular e instálalo.
-            Android pedirá permitir "instalar apps de fuentes desconocidas" para tu navegador la primera vez.
+            Novedades: seguimiento por voz en español (sin internet), ventana de texto ajustable, subtítulos automáticos y corte de silencios.
           files: Teleprompter.apk
           make_latest: true
+
+      - name: Publicar registro si falla
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-log
+          name: Registro de compilación (error)
+          prerelease: true
+          files: build.log
