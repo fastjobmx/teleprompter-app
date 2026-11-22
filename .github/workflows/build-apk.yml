@@ -47,11 +47,11 @@ jobs:
       - name: Publicar descarga
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.${{ github.run_number }}
-          name: Teleprompter 2.0.${{ github.run_number }}
+          tag_name: v3.0.${{ github.run_number }}
+          name: Teleprompter 3.0.${{ github.run_number }}
           body: |
             Descarga **Teleprompter.apk** desde el celular e instálalo.
-            Novedades: seguimiento por voz en español (sin internet), ventana de texto ajustable, subtítulos automáticos y corte de silencios.
+            Novedades: grabación por partes con varias tomas, edición con zoom automático, fundidos, filtros de color y formatos 9:16, 1:1 y 16:9.
           files: Teleprompter.apk
           make_latest: true
 

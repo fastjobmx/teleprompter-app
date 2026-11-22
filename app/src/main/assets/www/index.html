@@ -114,6 +114,24 @@ select{width:100%;min-height:44px;margin:6px 0 10px;border-radius:10px;border:1p
 .acts button:disabled{opacity:.45}
 #pbar{height:8px;border-radius:4px;background:#2a2a2e;overflow:hidden;margin-top:8px;display:none}#pbar b{display:block;height:100%;width:0;background:var(--rec);transition:width .3s}
 #rvinfo{text-align:center}
+#pinfo{display:none}#pr.multi #pinfo{display:flex}
+#prevP,#nextP{display:none}#pr.multi #prevP,#pr.multi #nextP{display:inline-block}
+#ts{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom) + 10px);z-index:7;background:rgba(18,18,20,.96);border:1px solid #333;border-radius:16px;padding:14px;display:none}
+#ts.on{display:block}#ts p{margin:0 0 10px;font-size:15px}
+.ed-l{display:block;font-size:14px;color:var(--mut);margin-top:6px}
+#frame{position:relative;height:100%;max-width:100%;margin:0 auto;overflow:hidden;background:#000}
+#frame.fx{aspect-ratio:var(--ar)}#frame.fx #rvv{object-fit:cover}
+#rvv{transform-origin:50% 50%}
+.prow{padding:10px 0;border-bottom:1px solid #26262a;cursor:pointer}
+.prow:last-child{border-bottom:0}
+.prow .ptx{font-size:14px;color:var(--mut);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.prow .ptx b{color:var(--ink);margin-right:6px}
+.prow.sel .ptx b{color:var(--rec)}
+.tks{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tk{min-height:36px;padding:0 12px;border-radius:999px;border:1px solid #333;background:#1c1c1f;color:#fff;font:600 13px Lexend,sans-serif;cursor:pointer}
+.tk.on{background:var(--rec);border-color:var(--rec)}
+.none{font-size:13px;color:#ff9f0a}
+#projBox .acts{margin-top:8px}
 @media(prefers-reduced-motion:reduce){#bar,#txt .w{transition:none}#recd i{animation:none}}
 </style>
 </head>
@@ -134,6 +152,14 @@ select{width:100%;min-height:44px;margin:6px 0 10px;border-radius:10px;border:1p
     <button data-m="voz">Sigue mi voz<small>Avanza cuando hablas, se detiene si haces pausa</small></button>
     <button data-m="auto">Velocidad fija<small>Sube solo, a la velocidad que elijas</small></button>
   </div>
+
+  <h2>¿Cómo grabas?</h2>
+  <div class="seg" id="multiSeg">
+    <button data-v="0">Todo de una vez<small>Un solo video con todo el guion</small></button>
+    <button data-v="1">Por partes<small>Una toma por párrafo: cambia de ángulo o de lugar entre partes</small></button>
+  </div>
+  <p class="note" id="partsNote"></p>
+  <div class="box" id="projBox" style="display:none;margin:14px 0"></div>
 
   <button class="go" id="startCam">● Grabar con cámara</button>
   <button class="go alt" id="startTxt">▶ Solo teleprompter</button>
@@ -178,12 +204,14 @@ select{width:100%;min-height:44px;margin:6px 0 10px;border-radius:10px;border:1p
   <div id="prog"></div>
   <div id="hud">
     <div id="recd"><i></i><span id="rt">0:00</span></div>
+    <div id="pinfo"></div>
     <div id="vst"><i></i><span id="vtx">Voz</span><span id="meter"><b></b></span></div>
   </div>
   <div id="cd"></div>
   <div id="msg"></div>
   <div id="bar">
     <button id="back" aria-label="Salir">✕</button>
+    <button id="prevP" aria-label="Parte anterior">◀ Parte</button>
     <button id="rw" aria-label="Volver al inicio">⏮</button>
     <button id="slow" aria-label="Más lento">−</button>
     <span class="v" id="bv"></span>
@@ -193,18 +221,39 @@ select{width:100%;min-height:44px;margin:6px 0 10px;border-radius:10px;border:1p
     <button id="aminus" aria-label="Letra más pequeña">A−</button>
     <button id="aplus" aria-label="Letra más grande">A+</button>
     <button id="flip" aria-label="Cambiar cámara">⟲ Cám</button>
+    <button id="nextP" aria-label="Parte siguiente">Parte ▶</button>
+    <button id="editB">Edición</button>
   </div>
+  <div id="ts"><p id="tsInfo"></p><div class="acts"><button id="tsRedo">↻ Repetir</button><button class="pri" id="tsNext">Siguiente parte ▶</button><button id="tsEdit">Ir a edición</button></div></div>
 </div>
 
 <div id="rv">
-  <div id="vwrap"><video id="rvv" controls playsinline></video><div id="cap"></div></div>
+  <div id="vwrap"><div id="frame"><video id="rvv" controls playsinline></video><div id="cap"></div></div></div>
   <div id="panel">
     <p class="note" id="rvinfo"></p>
+    <div class="box">
+      <h3>Partes y tomas</h3>
+      <p>Toca una parte para verla y elige la toma que quieres usar.</p>
+      <div id="plist"></div>
+      <div class="acts"><button id="playAll">▶ Ver todo seguido</button><button id="recPart">● Grabar esta parte</button><button id="delTake">Borrar toma elegida</button></div>
+    </div>
     <div class="box">
       <h3>Quitar silencios</h3>
       <label class="tg"><input type="checkbox" id="xSil">Cortar las pausas</label>
       <select id="silLvl"><option value="1.0">Suave (pausas de más de 1 s)</option><option value="0.6">Normal (más de 0,6 s)</option><option value="0.35">Agresivo, estilo TikTok (más de 0,35 s)</option></select>
       <p id="silInfo"></p>
+    </div>
+    <div class="box">
+      <h3>Efectos</h3>
+      <label class="ed-l" for="zoom">Zoom</label>
+      <select id="zoom"><option value="auto">Automático: zoom en cortes, cambios de frase y frases con «!»</option><option value="punch">Zoom en cortes y cambios de frase</option><option value="slow">Acercamiento lento en cada parte</option><option value="none">Sin zoom</option></select>
+      <label class="ed-l" for="trans">Entre partes</label>
+      <select id="trans"><option value="fade">Fundido rápido</option><option value="cut">Corte directo</option></select>
+      <label class="ed-l" for="filt">Color</label>
+      <select id="filt"><option value="none">Natural</option><option value="vivid">Vivo</option><option value="warm">Cálido</option><option value="cool">Frío</option><option value="bw">Blanco y negro</option></select>
+      <label class="ed-l" for="fmt">Formato</label>
+      <select id="fmt"><option value="9x16">Vertical 9:16 (Reels, TikTok, Shorts)</option><option value="1x1">Cuadrado 1:1 (feed)</option><option value="16x9">Horizontal 16:9 (YouTube)</option><option value="orig">Como se grabó</option></select>
+      <p class="note">Tip: escribe una palabra entre *asteriscos* en el guion para que el zoom automático la resalte.</p>
     </div>
     <div class="box">
       <h3>Subtítulos</h3>
@@ -216,14 +265,15 @@ select{width:100%;min-height:44px;margin:6px 0 10px;border-radius:10px;border:1p
     </div>
     <div class="box" id="expBox">
       <h3>Video final</h3>
-      <p id="expInfo">Aplica los cortes y los subtítulos y lo guarda en tu galería.</p>
+      <p id="expInfo"></p>
       <div id="pbar"><b></b></div>
       <div class="acts"><button class="pri" id="expBtn">Exportar video editado</button><button id="shareBtn">Compartir</button></div>
     </div>
     <div class="acts">
-      <button id="saveOrig">Guardar original</button>
-      <button id="again">Grabar otra vez</button>
-      <button id="discard">Descartar</button>
+      <button id="saveOrig">Guardar toma original</button>
+      <button id="backRec">Seguir grabando</button>
+      <button id="newProj">Nuevo proyecto</button>
+      <button id="closeEd">Salir de la edición</button>
     </div>
   </div>
 </div>
@@ -234,12 +284,12 @@ const $=id=>document.getElementById(id);
 const APP=!!(window.AndroidApp&&AndroidApp.isApp&&AndroidApp.isApp());
 const COLORS=["#ffffff","#ffd60a","#7cff6b","#5ac8fa","#ff9f0a","#ff6b9a"];
 const S={mode:"voz",sp:60,fs:44,lh:1.35,tc:"#ffffff",hc:"#ffd60a",ta:"left",by:0,bh:45,bw:100,op:55,gy:22,cdn:3,front:true,hq:true,mx:false,my:false,txt:"",
-  silLvl:"0.6",capSty:"box",capPos:"bottom",xSil:true,xCap:true};
+  silLvl:"0.6",capSty:"box",capPos:"bottom",xSil:true,xCap:true,multi:false,zoom:"auto",trans:"fade",filt:"none",fmt:"9x16"};
 try{Object.assign(S,JSON.parse(localStorage.getItem("tp3")||localStorage.getItem("tp2")||"{}"))}catch(e){}
 if(!S.txt)S.txt="Hola a todos, bienvenidos.\n\nEste es un texto de ejemplo. Reemplázalo con tu propio guion.\n\nEn modo voz, el texto avanza mientras hablas y se detiene cuando haces una pausa.\n\nMira al lente de la cámara y habla con naturalidad.\n\n¡Mucho éxito con tu grabación!";
 const save=()=>{try{localStorage.setItem("tp3",JSON.stringify(S))}catch(e){}};
 const src=$("src"),pr=$("pr"),scr=$("scr"),txt=$("txt"),cam=$("cam"),box=$("box");
-const RANGES=["sp","fs","lh","by","bh","bw","op","gy","cdn"],CHECKS=["front","hq","mx","my","xSil","xCap"],SELECTS=["ta","silLvl","capSty","capPos"];
+const RANGES=["sp","fs","lh","by","bh","bw","op","gy","cdn"],CHECKS=["front","hq","mx","my","xSil","xCap"],SELECTS=["ta","silLvl","capSty","capPos","zoom","trans","filt","fmt"];
 src.value=S.txt;RANGES.forEach(k=>$(k).value=S[k]);CHECKS.forEach(k=>$(k).checked=S[k]);SELECTS.forEach(k=>$(k).value=S[k]);
 const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")};
 const UNITS={fs:" px",by:"%",bh:"%",bw:"%",op:"%",gy:"%"};
@@ -275,8 +325,8 @@ $("eyePreset").onclick=()=>{Object.assign(S,{by:0,bh:30,bw:70,gy:20,fs:Math.min(
 const norm=w=>w.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9ñ]/g,"");
 const gword=w=>w.toLowerCase().replace(/[^a-záéíóúüñ0-9]/g,"");
 let W=[],NW=[],spans=[];
-function renderScript(){
-  const t=src.value||" ";const parts=t.split(/(\s+)/);W=[];NW=[];let h="";
+function renderScript(text){
+  const t=text||" ";const parts=t.split(/(\s+)/);W=[];NW=[];let h="";
   for(const p of parts){if(!p)continue;if(/^\s+$/.test(p)){h+=p.replace(/&/g,"&amp;").replace(/</g,"&lt;");continue}
     const n=norm(p);const esc=p.replace(/&/g,"&amp;").replace(/</g,"&lt;");
     if(n){h+=`<span class="w" data-i="${W.length}">${esc}</span>`;W.push(p);NW.push(n)}else h+=esc}
@@ -336,7 +386,7 @@ async function startVoice(){
     await loadScript("vosk.js");
     if(!model){const r=await fetch("model.tgz");if(!r.ok)throw new Error("Falta el modelo de voz");
       const url=URL.createObjectURL(await r.blob());model=await Vosk.createModel(url)}
-    const vocab=[...new Set(W.map(gword).filter(Boolean))];vocab.push("[unk]");
+    const vocab=[...new Set(tokens(P.parts.join(" ")).W.map(gword).filter(Boolean))];vocab.push("[unk]");
     recog=new model.KaldiRecognizer(sr,JSON.stringify(vocab));vT0=fed/sr;recog.setWords(true);
     recog.on("result",m=>onResult(m.result));recog.on("partialresult",m=>onPartial(m.result.partial));
     voiceReady=true;listening=false;pr.classList.add("voice");$("pp").textContent="▶ Voz";vstatus();
@@ -384,8 +434,53 @@ function followTo(i,force){
 }
 function follow(){if(voiceReady){const d=target-scr.scrollTop;if(Math.abs(d)>1)scr.scrollTop+=d*0.12;prog()}vraf=requestAnimationFrame(follow)}
 
+/* ---- Proyecto: partes y tomas ---- */
+const splitParts=(t,m)=>m?t.split(/\n\s*\n|\n-{3,}\s*\n/).map(x=>x.trim()).filter(Boolean):[t.trim()||" "];
+const sig=(t,m)=>(m?"m":"s")+t.length+":"+[...t].reduce((h,c)=>(h*31+c.charCodeAt(0))|0,0);
+const newP=()=>({sig:"",text:"",multi:false,parts:[],takes:[],chosen:{}});
+let P=newP();
+try{const x=JSON.parse(localStorage.getItem("tp_proj")||"null");if(x&&x.parts)P=x}catch(e){}
+const saveP=()=>{try{localStorage.setItem("tp_proj",JSON.stringify(P))}catch(e){}};
+const BL={},URLS={},UP={};
+let curPart=0,selPart=0;
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+function tokens(t){const W=[],NW=[];for(const p of t.split(/\s+/)){const n=norm(p);if(n){W.push(p);NW.push(n)}}return{W,NW}}
+const takeById=id=>P.takes.find(t=>t.id===id)||null;
+const takeOf=p=>takeById(P.chosen[p]);
+const takesOf=p=>P.takes.filter(t=>t.part===p);
+function ensureProject(){
+  const s=sig(src.value,S.multi);
+  if(P.takes.length&&P.sig!==s)return false;
+  if(P.sig!==s){P=newP();Object.assign(P,{sig:s,text:src.value,multi:S.multi,parts:splitParts(src.value,S.multi)});saveP()}
+  return true;
+}
+function newProject(){
+  if(APP)try{AndroidApp.clearTakes()}catch(e){}
+  Object.values(URLS).forEach(u=>{try{URL.revokeObjectURL(u)}catch(e){}});
+  for(const k in BL)delete BL[k];for(const k in URLS)delete URLS[k];
+  P=newP();saveP();projUI();
+}
+function markMulti(){document.querySelectorAll("#multiSeg button").forEach(b=>b.classList.toggle("on",(b.dataset.v==="1")===S.multi))}
+$("multiSeg").onclick=e=>{const b=e.target.closest("button");if(b){S.multi=b.dataset.v==="1";markMulti();save();projUI()}};
+function projUI(){
+  const parts=splitParts(src.value,S.multi);
+  $("partsNote").textContent=S.multi?`Tu guion tiene ${parts.length} ${parts.length===1?"parte":"partes"}. Separa las partes con una línea en blanco.`:"";
+  const b=$("projBox"),n=P.takes.length;
+  if(!n){b.style.display="none";return}
+  const mismatch=P.sig!==sig(src.value,S.multi);const done=new Set(P.takes.map(t=>t.part)).size;
+  b.style.display="block";
+  b.innerHTML=`<h3>Proyecto en curso</h3><p>${n} ${n===1?"toma grabada":"tomas grabadas"} · ${done} de ${P.parts.length} ${P.parts.length===1?"parte":"partes"}.</p>`+
+    (mismatch?`<p>Cambiaste el guion o la forma de grabar. Restaura el guion del proyecto para seguir, o empieza uno nuevo.</p><div class="acts"><button id="pjRestore">Restaurar guion del proyecto</button><button id="pjNew">Nuevo proyecto</button></div>`
+    :`<div class="acts"><button class="pri" id="pjOpen">Abrir edición</button><button id="pjNew">Nuevo proyecto</button></div>`);
+  const o=$("pjOpen"),r=$("pjRestore");
+  if(o)o.onclick=()=>openEditor(0);
+  if(r)r.onclick=()=>{src.value=P.text;S.txt=P.text;S.multi=P.multi;markMulti();stats();save();projUI()};
+  $("pjNew").onclick=()=>{if($("pjNew").dataset.c){newProject()}else{$("pjNew").dataset.c=1;$("pjNew").textContent="¿Seguro? Se borran las tomas"}};
+}
+src.addEventListener("input",projUI);
+
 /* ---- Cámara y grabación ---- */
-let stream=null,rec=null,chunks=[],recording=false,stopping=false,recStart=0,recDur=0,recTimer=0,blob=null,blobUrl="",ext="webm",wake=null,vidW=1080,vidH=1920;
+let stream=null,rec=null,chunks=[],recording=false,stopping=false,recStart=0,recDur=0,recTimer=0,wake=null,vidW=1080,vidH=1920,capPtr0=0;
 function pickMime(){if(!window.MediaRecorder)return"";const c=["video/mp4;codecs=avc1,mp4a","video/mp4","video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"];for(const m of c){try{if(MediaRecorder.isTypeSupported(m))return m}catch(e){}}return""}
 async function startCamera(){
   stopCamera();msg("");
@@ -402,12 +497,14 @@ async function lockScreen(){try{if("wakeLock" in navigator)wake=await navigator.
 function startRec(){
   if(!stream)return;const mime=pickMime();
   if(!window.MediaRecorder){msg("Tu navegador no puede grabar video.",true);return}
-  ext=mime.includes("mp4")?"mp4":"webm";chunks=[];levels=[];capW=[];capPtr=cur;capPtr0=cur;heard=[];
+  hideSheet();
+  const ext=mime.includes("mp4")?"mp4":"webm";chunks=[];levels=[];capW=[];capPtr=cur;capPtr0=cur;heard=[];
   try{rec=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:S.hq?8e6:4e6}:undefined)}catch(e){rec=new MediaRecorder(stream)}
   rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
   rec.onstop=async()=>{recDur=(Date.now()-recStart)/1000;
     if(recog){stopping=true;try{recog.retrieveFinalResult()}catch(e){}await new Promise(r=>setTimeout(r,900));stopping=false}
-    blob=new Blob(chunks,{type:rec.mimeType||mime||"video/webm"});if(blobUrl)URL.revokeObjectURL(blobUrl);blobUrl=URL.createObjectURL(blob);openReview()};
+    const blob=new Blob(chunks,{type:rec.mimeType||mime||"video/webm"});
+    addTake(blob,(rec.mimeType||mime).includes("mp4")?"mp4":ext)};
   const vt=stream.getVideoTracks()[0];const st=vt&&vt.getSettings?vt.getSettings():{};vidW=cam.videoWidth||st.width||1080;vidH=cam.videoHeight||st.height||1920;
   rec.start(1000);recording=true;recStart=Date.now();recT0=fed/sr;pr.classList.add("rec");vstatus();
   $("rt").textContent="0:00";recTimer=setInterval(()=>$("rt").textContent=fmt((Date.now()-recStart)/1000),500);
@@ -416,113 +513,262 @@ function startRec(){
 function stopRec(){if(!recording)return;recording=false;clearInterval(recTimer);pr.classList.remove("rec");pauseText();vstatus();try{rec.stop()}catch(e){}}
 $("recb").onclick=()=>{if(recording)return stopRec();if($("cd").classList.contains("on"))return cancelCd();countdown(startRec)};
 
+function addTake(blob,ext){
+  const id="t"+Date.now().toString(36);const step=4096/sr;
+  const t={id,part:curPart,dur:+recDur.toFixed(3),step,lt0:levels.length?levels[0][0]:0,lv:levels.map(l=>l[1]).join(""),
+    cw:capW.map(w=>[w.i,+w.s.toFixed(3),+w.e.toFixed(3)]),c0:capPtr0,w:vidW,h:vidH,ext,mime:blob.type,ok:!APP};
+  BL[id]=blob;P.takes.push(t);P.chosen[curPart]=id;saveP();
+  if(APP)UP[id]=uploadTake(t,blob).then(()=>{t.ok=true;saveP()}).catch(e=>{t.err=e.message});
+  partInfo();
+  if(P.parts.length>1)showSheet(t);else openEditor(curPart);
+}
+function b64(u8){let s="";for(let i=0;i<u8.length;i+=32768)s+=String.fromCharCode.apply(null,u8.subarray(i,i+32768));return btoa(s)}
+async function uploadTake(t,blob){
+  if(!AndroidApp.begin(t.id+"."+t.ext,blob.type))throw new Error("no se pudo empezar a guardar");
+  const CH=3*262144;
+  for(let o=0;o<blob.size;o+=CH){const u8=new Uint8Array(await blob.slice(o,o+CH).arrayBuffer());if(!AndroidApp.append(b64(u8)))throw new Error("error al guardar")}
+  const r=AndroidApp.finishTake(t.id);if(r!=="ok")throw new Error(r);
+}
+async function takesReady(ids){
+  for(const id of ids){const t=takeById(id);if(!t)return false;if(UP[id])try{await UP[id]}catch(e){}if(APP&&!t.ok)return false}
+  return true;
+}
+
+/* ---- Hoja después de cada toma ---- */
+function showSheet(t){
+  const n=takesOf(t.part).length,last=curPart>=P.parts.length-1;
+  $("tsInfo").textContent=`Parte ${t.part+1} de ${P.parts.length}: toma ${n} guardada (${fmt(t.dur)}). Puedes repetirla, cambiar de ángulo o de lugar y seguir.`;
+  $("tsNext").textContent=last?"Terminar y editar ▶":"Siguiente parte ▶";
+  $("ts").classList.add("on");showBar();
+}
+function hideSheet(){$("ts").classList.remove("on")}
+$("tsRedo").onclick=()=>{hideSheet();loadPart(curPart)};
+$("tsNext").onclick=()=>{hideSheet();if(curPart>=P.parts.length-1)openEditor(0);else loadPart(curPart+1)};
+$("tsEdit").onclick=()=>{hideSheet();openEditor(curPart)};
+
 /* ---- Ventana arrastrable ---- */
 {let y0=0,b0=0,drag=false;const g=$("grip");
  g.addEventListener("pointerdown",e=>{drag=true;y0=e.clientY;b0=S.by;g.setPointerCapture(e.pointerId);e.stopPropagation()});
  g.addEventListener("pointermove",e=>{if(!drag)return;S.by=Math.max(0,Math.min(80,Math.round(b0+(e.clientY-y0)/innerHeight*100)));$("by").value=S.by;labels()});
  g.addEventListener("pointerup",()=>{drag=false;save()});}
 
-/* ---- Silencios y subtítulos ---- */
-function silenceCuts(minSil){
-  const pad=Math.min(0.15,minSil*0.3),step=4096/sr;const cuts=[];let s=null;
-  const L=levels.filter(l=>l[0]>=0&&l[0]<=recDur);
+/* ---- Análisis: silencios, subtítulos y zoom ---- */
+function levelsOf(t){return [...t.lv].map((c,i)=>[t.lt0+i*t.step,+c])}
+function silenceCuts(L,dur,minSil,step){
+  const pad=Math.min(0.15,minSil*0.3);const cuts=[];let s=null;
+  L=L.filter(l=>l[0]>=0&&l[0]<=dur);
   for(const [t,v] of L){if(!v){if(s===null)s=t}else if(s!==null){if(t-s>=minSil)cuts.push([s,t]);s=null}}
-  if(s!==null&&recDur-s>=minSil)cuts.push([s,recDur+1]);
+  if(s!==null&&dur-s>=minSil)cuts.push([s,dur+1]);
   const keep=[];let p=0;
-  for(const [a,b] of cuts){const ca=a===0||a<step?0:a+pad,cb=b>recDur?recDur:b-pad;if(cb-ca<0.12)continue;if(ca>p+0.05)keep.push([p,ca]);p=cb}
-  if(recDur>p+0.05)keep.push([p,recDur]);
+  for(const [a,b] of cuts){const ca=a<step?0:a+pad,cb=b>dur?dur:b-pad;if(cb-ca<0.12)continue;if(ca>p+0.05)keep.push([p,ca]);p=cb}
+  if(dur>p+0.05)keep.push([p,dur]);
   return keep.filter(k=>k[1]-k[0]>0.1);
 }
-function buildCues(){
-  const ws=capW.filter(w=>w.e>0&&w.s<recDur+1).sort((a,b)=>a.i-b.i);const out=[];let curC=null,prevI=capPtr0-1;
+function trimEdges(L,dur){
+  const sp=L.filter(l=>l[1]&&l[0]>=0&&l[0]<=dur);
+  if(!sp.length)return[[0,dur]];
+  return[[Math.max(0,sp[0][0]-0.25),Math.min(dur,sp[sp.length-1][0]+0.45)]];
+}
+function buildCues(cw,W,c0,dur){
+  const ws=cw.map(([i,s,e])=>({i,s,e})).filter(w=>w.e>0&&w.s<dur+1).sort((a,b)=>a.i-b.i);const out=[];let cc=null,prevI=c0-1;
   for(const w of ws){
     const text=W.slice(prevI+1,w.i+1).join(" ");prevI=w.i;
-    const endP=/[.!?…:;]$/.test(W[w.i]);
-    if(curC&&(curC.t.length+text.length+1>24||w.s-curC.e>0.7)){out.push(curC);curC=null}
-    if(!curC)curC={s:w.s,e:w.e,t:text};else{curC.t+=" "+text;curC.e=w.e}
-    if(endP||/[,]$/.test(W[w.i])&&curC.t.length>12){out.push(curC);curC=null}
+    if(cc&&(cc.t.length+text.length+1>24||w.s-cc.e>0.7)){out.push(cc);cc=null}
+    if(!cc)cc={s:w.s,e:w.e,t:text};else{cc.t+=" "+text;cc.e=w.e}
+    if(/[.!?…:;]$/.test(W[w.i])||/,$/.test(W[w.i])&&cc.t.length>12){out.push(cc);cc=null}
   }
-  if(curC)out.push(curC);
+  if(cc)out.push(cc);
   for(let i=0;i<out.length;i++){const n=out[i+1];out[i].e=Math.max(out[i].s+0.4,n?Math.min(out[i].e+0.35,n.s):out[i].e+0.5);out[i].s=Math.max(0,out[i].s)}
   return out;
 }
-let capPtr0=0,cues=[],segs=[];
+function analyze(t){
+  const L=levelsOf(t);const {W}=tokens(P.parts[t.part]||"");
+  const segs=(S.xSil&&L.length?silenceCuts(L,t.dur,parseFloat(S.silLvl),t.step):L.length?trimEdges(L,t.dur):[[0,t.dur]]);
+  const cues=buildCues(t.cw,W,t.c0,t.dur);
+  return{segs:segs.length?segs:[[0,t.dur]],cues};
+}
 function mapT(t,ks){let acc=0;for(const [a,b] of ks){if(t<a)return acc;if(t<=b)return acc+t-a;acc+=b-a}return acc}
-const useSilNow=()=>S.xSil&&segs.length>0&&!(segs.length===1&&segs[0][0]<0.1&&segs[0][1]>recDur-0.1);
-function editedCues(){if(!useSilNow())return cues;return cues.map(c=>({s:mapT(c.s,segs),e:mapT(c.e,segs),t:c.t})).filter(c=>c.e-c.s>0.15)}
-const capText=t=>S.capSty==="upper"?t.toUpperCase():t;
+const segLen=ks=>ks.reduce((a,k)=>a+k[1]-k[0],0);
+const ZIN=1.15,ZEMP=1.28;
+function zAtBase(kf,t){let z=1;for(const k of kf){if(k.t<=t)z=k.z;else break}return z}
+function zoomPlan(segs,cues){
+  const Z=S.zoom;if(Z==="none"||!segs.length)return[];
+  if(Z==="slow")return[{t:segs[0][0],z:1,m:"c"},{t:segs[segs.length-1][1],z:1.1,m:"l"}];
+  let kf=[],lvl=0;
+  segs.forEach((g,k)=>{if(k){lvl^=1}kf.push({t:g[0],z:lvl?ZIN:1,m:"c"})});
+  const nearCut=x=>segs.some(g=>Math.abs(g[0]-x)<1.2);
+  let lastT=segs[0][0];
+  if(cues.length){
+    for(let i=1;i<cues.length;i++){const s=cues[i].s;
+      if(/[.!?…]$/.test(cues[i-1].t.trim())&&s-lastT>2.5&&!nearCut(s)){kf.push({t:s,z:0,m:"c"});lastT=s}}
+  }else{
+    for(const g of segs)for(let x=g[0]+5;x<g[1]-2;x+=5)kf.push({t:x,z:0,m:"c"});
+  }
+  kf.sort((a,b)=>a.t-b.t);
+  lvl=0;for(const k of kf){if(k.z===0){lvl^=1;k.z=lvl?ZIN:1}else lvl=k.z>1?1:0}
+  if(Z==="auto"){
+    const base=kf.slice();
+    for(const c of cues)if(/[!¡]/.test(c.t)||/\*[^*]+\*/.test(c.t)){
+      kf=kf.filter(k=>!(k.t>c.s&&k.t<c.e));
+      kf.push({t:c.s,z:ZEMP,m:"e"},{t:c.e,z:zAtBase(base,c.e),m:"e"});
+    }
+    kf.sort((a,b)=>a.t-b.t);
+  }
+  return kf;
+}
+function zoomAt(kf,t){
+  let pz=1,pt=0;
+  for(const k of kf){
+    if(t<k.t){
+      if(k.m==="l"){const d=k.t-pt;return d>0?pz+(k.z-pz)*Math.max(0,(t-pt)/d):k.z}
+      if(k.m==="e"&&t>k.t-0.3){const f=(t-(k.t-0.3))/0.3;return pz+(k.z-pz)*(1-(1-f)*(1-f))}
+      return pz}
+    pz=k.z;pt=k.t}
+  return pz;
+}
+function assemble(){
+  const items=[],cues=[],zooms=[],fades=[];let off=0,raw=0;
+  for(let p=0;p<P.parts.length;p++){const t=takeOf(p);if(!t)continue;
+    const a=analyze(t);const L=segLen(a.segs);raw+=t.dur;
+    if(items.length)fades.push(off);
+    items.push({take:t.id,ext:t.ext,segs:a.segs,w:t.w,h:t.h});
+    const mt=x=>off+mapT(x,a.segs);
+    for(const c of a.cues){const s=mt(c.s),e=mt(c.e);if(e-s>0.15)cues.push({s,e,t:c.t})}
+    const kf=zoomPlan(a.segs,a.cues);
+    zooms.push({t:off,z:kf.length?kf[0].z:1,m:"c"});
+    for(const k of kf){const x=mt(k.t);if(x>off+0.01)zooms.push({t:x,z:k.z,m:k.m})}
+    off+=L;
+  }
+  return{items,cues,zooms,fades,dur:off,raw};
+}
+const capText=t=>{t=t.replace(/\*/g,"");return S.capSty==="upper"?t.toUpperCase():t};
 function srt(cs){const f=x=>{const ms=Math.round(x*1000),h=Math.floor(ms/3600000),m=Math.floor(ms/60000)%60,s=Math.floor(ms/1000)%60;return`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")},${String(ms%1000).padStart(3,"0")}`};
   return cs.map((c,i)=>`${i+1}\n${f(c.s)} --> ${f(c.e)}\n${capText(c.t)}\n`).join("\n")}
+
+/* ---- Edición ---- */
+const rvv=$("rvv");let pv=null,pvRaf=0,playAllOn=false;
+const FILTERS={none:"",vivid:"saturate(1.3) contrast(1.05)",warm:"sepia(.18) saturate(1.15)",cool:"hue-rotate(-12deg) saturate(.95) brightness(1.02)",bw:"grayscale(1) contrast(1.1)"};
+const FORMATS={"9x16":[9,16],"1x1":[1,1],"16x9":[16,9]};
+function takeURL(t){if(BL[t.id])return URLS[t.id]||(URLS[t.id]=URL.createObjectURL(BL[t.id]));return APP&&t.ok?"https://appassets.androidplatform.net/takes/"+t.id+"."+t.ext:""}
+function openEditor(p){
+  pauseText();hideSheet();
+  if(!P.takes.length){msg("Todavía no hay tomas grabadas.",true);setTimeout(()=>msg(""),2500);return}
+  selPart=Math.max(0,Math.min(P.parts.length-1,p||0));if(!takeOf(selPart)){const q=P.parts.findIndex((_,i)=>takeOf(i));if(q>=0)selPart=q}
+  $("rv").classList.add("on");$("expBtn").disabled=false;$("pbar").style.display="none";
+  $("expBtn").textContent=APP?"Exportar video editado":"Descargar toma elegida";
+  $("saveOrig").style.display=APP?"":"none";
+  renderParts();updateEditInfo();preview(selPart,false);
+}
+function closeEditor(){$("rv").classList.remove("on");stopPreview();rvv.removeAttribute("src");rvv.load&&rvv.load()}
+function renderParts(){
+  $("plist").innerHTML=P.parts.map((tx,p)=>{const ts=takesOf(p);
+    return`<div class="prow${p===selPart?" sel":""}" data-p="${p}"><div class="ptx"><b>Parte ${p+1}</b>${esc(tx)}</div><div class="tks">${ts.length?ts.map((t,i)=>`<button class="tk${P.chosen[p]===t.id?" on":""}" data-t="${t.id}">Toma ${i+1} · ${fmt(t.dur)}</button>`).join(""):`<span class="none">Sin grabar</span>`}</div></div>`}).join("");
+  $("delTake").disabled=!takeOf(selPart);
+}
+$("plist").onclick=e=>{const tk=e.target.closest(".tk"),row=e.target.closest(".prow");if(!row)return;const p=+row.dataset.p;
+  if(tk){P.chosen[p]=tk.dataset.t;saveP()}selPart=p;playAllOn=false;renderParts();updateEditInfo();preview(p,!!tk)};
+function preview(p,autoplay){
+  stopPreview();const t=takeOf(p);const fr=$("frame");
+  const f=FORMATS[S.fmt];fr.classList.toggle("fx",!!f);if(f)fr.style.setProperty("--ar",f[0]+"/"+f[1]);
+  rvv.style.filter=FILTERS[S.filt]||"";$("cap").innerHTML="";
+  if(!t){rvv.removeAttribute("src");pv=null;return}
+  const a=analyze(t);pv={t,segs:a.segs,cues:a.cues,kf:zoomPlan(a.segs,a.cues),p};
+  const u=takeURL(t);if(!u){$("rvinfo").textContent="Esta toma se está guardando, espera un momento.";return}
+  if(rvv.getAttribute("src")!==u)rvv.src=u;
+  rvv.onloadedmetadata=()=>{try{if(pv&&pv.segs[0][0]>0.2)rvv.currentTime=pv.segs[0][0]}catch(e){}};
+  if(autoplay)rvv.play().catch(()=>{});
+  pvRaf=requestAnimationFrame(pvTick);
+}
+function stopPreview(){cancelAnimationFrame(pvRaf);try{rvv.pause()}catch(e){}rvv.style.transform=""}
+function pvTick(){
+  if(pv){const t=rvv.currentTime;
+    rvv.style.transform=`scale(${zoomAt(pv.kf,t).toFixed(3)})`;
+    const c=S.xCap&&pv.cues.find(c=>t>=c.s&&t<c.e);const el=$("cap");
+    if(c){const st=S.capSty==="yellow"?"color:#ffd60a;text-shadow:0 2px 6px #000":S.capSty==="upper"?"color:#fff;text-shadow:0 0 4px #000,0 2px 8px #000":"color:#fff;background:rgba(0,0,0,.65)";
+      el.innerHTML=`<span style="${st}">${esc(capText(c.t))}</span>`}else el.innerHTML="";
+    if(!rvv.paused){const g=pv.segs;
+      if(!g.some(k=>t>=k[0]-0.05&&t<=k[1])){const n=g.find(k=>k[0]>t);
+        if(n){try{rvv.currentTime=n[0]}catch(e){}}else if(t>g[g.length-1][1])endOfPart()}}
+  }
+  pvRaf=requestAnimationFrame(pvTick);
+}
+function endOfPart(){
+  if(!playAllOn){rvv.pause();return}
+  let q=selPart+1;while(q<P.parts.length&&!takeOf(q))q++;
+  if(q>=P.parts.length){playAllOn=false;rvv.pause();return}
+  selPart=q;renderParts();preview(q,true);
+}
+rvv.addEventListener("ended",endOfPart);
+$("playAll").onclick=()=>{const q=P.parts.findIndex((_,i)=>takeOf(i));if(q<0)return;playAllOn=true;selPart=q;renderParts();preview(q,true)};
+$("recPart").onclick=()=>{const p=selPart;closeEditor();if(pr.classList.contains("on"))loadPart(p);else enter(true,p)};
+$("backRec").onclick=()=>{let p=P.parts.findIndex((_,i)=>!takeOf(i));if(p<0)p=selPart;closeEditor();if(pr.classList.contains("on"))loadPart(p);else enter(true,p)};
+$("delTake").onclick=()=>{const t=takeOf(selPart);if(!t)return;
+  if(!$("delTake").dataset.c){$("delTake").dataset.c=1;$("delTake").textContent="¿Borrar? Toca otra vez";setTimeout(()=>{delete $("delTake").dataset.c;$("delTake").textContent="Borrar toma elegida"},3000);return}
+  delete $("delTake").dataset.c;$("delTake").textContent="Borrar toma elegida";
+  if(APP)try{AndroidApp.deleteTake(t.id)}catch(e){}
+  if(URLS[t.id]){URL.revokeObjectURL(URLS[t.id]);delete URLS[t.id]}delete BL[t.id];
+  P.takes=P.takes.filter(x=>x!==t);const rest=takesOf(selPart);if(rest.length)P.chosen[selPart]=rest[rest.length-1].id;else delete P.chosen[selPart];saveP();
+  if(!P.takes.length){closeEditor();projUI();return}
+  renderParts();updateEditInfo();preview(selPart,false)};
+$("newProj").onclick=()=>{const b=$("newProj");if(!b.dataset.c){b.dataset.c=1;b.textContent="¿Seguro? Se borran todas las tomas";setTimeout(()=>{delete b.dataset.c;b.textContent="Nuevo proyecto"},3000);return}
+  delete b.dataset.c;b.textContent="Nuevo proyecto";closeEditor();exit();newProject()};
+$("closeEd").onclick=()=>{closeEditor();exit();projUI()};
 function updateEditInfo(){
   if(!$("rv").classList.contains("on"))return;
-  segs=silenceCuts(parseFloat(S.silLvl));const kept=segs.reduce((a,k)=>a+k[1]-k[0],0);const n=segs.length?Math.max(0,segs.length-1)+(segs[0][0]>0.1?1:0)+(segs[segs.length-1][1]<recDur-0.1?1:0):0;
-  $("silInfo").textContent=levels.length?(n?`Se ${n===1?"quita 1 pausa":"quitan "+n+" pausas"}: el video pasa de ${fmt(recDur)} a ${fmt(kept)}.`:"No encontré pausas largas para cortar."):"No hay datos de audio para detectar pausas.";
-  $("capInfo").textContent=cues.length?`${cues.length} subtítulos generados a partir de tu voz.`:"Graba en modo «Sigue mi voz» para generar subtítulos automáticamente.";
-  ["xCap","capSty","capPos","srtBtn","srtCopy"].forEach(k=>$(k).disabled=!cues.length);
+  const A=assemble();const n=P.parts.length,rec=P.parts.filter((_,i)=>takeOf(i)).length;
+  $("rvinfo").textContent=(n>1?`${rec} de ${n} partes grabadas · `:"")+`video final ≈ ${fmt(A.dur)}`+(A.raw-A.dur>0.5?` (grabaste ${fmt(A.raw)})`:"");
+  $("silInfo").textContent=S.xSil?(A.raw-A.dur>0.5?`Se quitan ${fmt(A.raw-A.dur)} de pausas.`:"No encontré pausas largas para cortar."):"Solo se recorta el inicio y el final de cada toma.";
+  $("capInfo").textContent=A.cues.length?`${A.cues.length} subtítulos generados a partir de tu voz.`:"Graba en modo «Sigue mi voz» para generar subtítulos automáticamente.";
+  ["xCap","capSty","capPos","srtBtn","srtCopy"].forEach(k=>$(k).disabled=!A.cues.length);
   $("cap").className=S.capPos==="top"?"top":S.capPos==="mid"?"mid":"";
+  $("expInfo").textContent=APP?"Une las partes con los cortes, efectos y subtítulos, y lo guarda en tu galería.":"La unión de partes con efectos se hace en la app Android. Aquí puedes descargar cada toma.";
+  if(pv&&pv.p===selPart)preview(selPart,!rvv.paused);
 }
-function previewCap(){const v=$("rvv"),t=v.currentTime,c=S.xCap&&cues.find(c=>t>=c.s&&t<c.e);const el=$("cap");
-  if(!c){el.innerHTML="";return}
-  const st=S.capSty==="yellow"?"color:#ffd60a;text-shadow:0 2px 6px #000":S.capSty==="upper"?"color:#fff;text-shadow:0 0 4px #000,0 2px 8px #000":"color:#fff;background:rgba(0,0,0,.65)";
-  el.innerHTML=`<span style="${st}">${capText(c.t).replace(/</g,"&lt;")}</span>`}
-$("rvv").addEventListener("timeupdate",previewCap);
-
-/* ---- Revisión ---- */
-let uploaded=false,uploading=null;
-function openReview(){
-  uploaded=false;uploading=null;cues=buildCues();
-  const v=$("rvv");v.src=blobUrl;$("rv").classList.add("on");
-  $("rvinfo").textContent="Video de "+fmt(recDur)+" · "+(blob.size/1048576).toFixed(1)+" MB";
-  $("expBtn").disabled=false;$("expBtn").textContent=APP?"Exportar video editado":"Descargar video";$("pbar").style.display="none";
-  $("expInfo").textContent=APP?"Aplica los cortes y los subtítulos y lo guarda en tu galería.":"En la versión web se descarga el video original; los cortes y subtítulos en el video están en la app Android.";
-  $("shareBtn").textContent=APP?"Compartir":"Compartir / Guardar";$("saveOrig").style.display=APP?"":"none";
-  updateEditInfo();if(APP)uploading=upload();
-}
-function fileName(sfx,e){const d=new Date(),p=n=>String(n).padStart(2,"0");return"prompter-"+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes())+(sfx||"")+"."+(e||ext)}
+function fileName(sfx,e){const d=new Date(),p=n=>String(n).padStart(2,"0");return"prompter-"+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes())+(sfx||"")+"."+e}
 function download(url,name){const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove()}
-function b64(u8){let s="";for(let i=0;i<u8.length;i+=32768)s+=String.fromCharCode.apply(null,u8.subarray(i,i+32768));return btoa(s)}
-async function upload(){
-  const info=$("rvinfo"),base=info.textContent;
-  if(!AndroidApp.begin(fileName("",ext),blob.type))throw new Error("begin");
-  const CH=3*262144;
-  for(let o=0;o<blob.size;o+=CH){const u8=new Uint8Array(await blob.slice(o,o+CH).arrayBuffer());if(!AndroidApp.append(b64(u8)))throw new Error("append");
-    info.textContent=base+" · preparando "+Math.min(100,Math.round((o+CH)/blob.size*100))+"%"}
-  const r=AndroidApp.finishRecording();if(r!=="ok")throw new Error(r);info.textContent=base;uploaded=true;
-}
-async function ready(){try{await uploading;return uploaded}catch(e){$("rvinfo").textContent="No se pudo preparar el video ("+e.message+")";return false}}
-$("saveOrig").onclick=async()=>{if(!await ready())return;const r=AndroidApp.saveOriginal();$("rvinfo").textContent=r==="ok"?"Original guardado en Galería › Movies/Teleprompter":"No se pudo guardar ("+r+")";if(r==="ok")$("saveOrig").textContent="✓ Original guardado"};
-$("srtBtn").onclick=()=>{const t=srt(editedCues());const name=fileName("","srt");
+$("saveOrig").onclick=async()=>{const t=takeOf(selPart);if(!t||!await takesReady([t.id]))return;const r=AndroidApp.saveTake(t.id);$("rvinfo").textContent=r==="ok"?"Toma guardada en Galería › Movies/Teleprompter":"No se pudo guardar ("+r+")"};
+$("srtBtn").onclick=()=>{const t=srt(assemble().cues);const name=fileName("","srt");
   if(APP){const r=AndroidApp.saveText(name,"application/x-subrip",t);$("capInfo").textContent=r==="ok"?"Subtítulos guardados en Descargas ("+name+")":"No se pudo guardar ("+r+")"}
   else download(URL.createObjectURL(new Blob([t],{type:"text/plain"})),name)};
-$("srtCopy").onclick=async()=>{const t=srt(editedCues());if(APP){AndroidApp.copyText(t)}else{try{await navigator.clipboard.writeText(t)}catch(e){}}$("srtCopy").textContent="✓ Copiados";setTimeout(()=>$("srtCopy").textContent="Copiar subtítulos",1500)};
+$("srtCopy").onclick=async()=>{const t=srt(assemble().cues);if(APP){AndroidApp.copyText(t)}else{try{await navigator.clipboard.writeText(t)}catch(e){}}$("srtCopy").textContent="✓ Copiados";setTimeout(()=>$("srtCopy").textContent="Copiar subtítulos",1500)};
+const even=x=>Math.max(2,Math.round(x/2)*2);
 $("expBtn").onclick=async()=>{
-  if(!APP){download(blobUrl,fileName());return}
-  if(!await ready())return;
-  const useSil=useSilNow();
-  const cfg={segments:useSil?segs.map(k=>[Math.round(k[0]*1000),Math.round(k[1]*1000)]):[],
-    cues:S.xCap?editedCues().map(c=>({s:Math.round(c.s*1000),e:Math.round(c.e*1000),t:capText(c.t)})):[],
-    style:S.capSty,pos:S.capPos,scale:Math.min(vidW,vidH)/1080,name:fileName("-editado","mp4")};
-  $("expBtn").disabled=true;$("expBtn").textContent="Exportando…";$("pbar").style.display="block";$("pbar").firstChild.style.width="0";
+  const A=assemble();if(!A.items.length)return;
+  if(!APP){const t=takeOf(selPart);if(t)download(takeURL(t),fileName("-parte"+(selPart+1),t.ext));return}
+  $("expBtn").disabled=true;$("expBtn").textContent="Preparando tomas…";
+  if(!await takesReady(A.items.map(i=>i.take))){$("expBtn").disabled=false;$("expBtn").textContent="Reintentar";$("expInfo").textContent="Alguna toma no terminó de guardarse. Vuelve a grabarla.";return}
+  const big=S.hq?1920:1280,sm=S.hq?1080:720;
+  const sz=S.fmt==="9x16"?[sm,big]:S.fmt==="1x1"?[sm,sm]:S.fmt==="16x9"?[big,sm]:[even(A.items[0].w),even(A.items[0].h)];
+  const ms=x=>Math.round(x*1000);
+  const cfg={items:A.items.map(i=>({take:i.take,ext:i.ext,segs:i.segs.map(k=>[ms(k[0]),ms(k[1])])})),
+    cues:S.xCap?A.cues.map(c=>({s:ms(c.s),e:ms(c.e),t:capText(c.t)})):[],
+    zooms:A.zooms.map(z=>({t:ms(z.t),z:+z.z.toFixed(3),m:z.m})),fades:S.trans==="fade"?A.fades.map(ms):[],
+    filter:S.filt,w:sz[0],h:sz[1],style:S.capSty,pos:S.capPos,scale:Math.min(sz[0],sz[1])/1080,name:fileName("-editado","mp4")};
+  $("expBtn").textContent="Exportando…";$("pbar").style.display="block";$("pbar").firstChild.style.width="0";
   $("expInfo").textContent="Procesando en tu celular. No cierres la app.";
   AndroidApp.exportVideo(JSON.stringify(cfg));
 };
-window.onExportProgress=s=>{const [st,p]=s.split(":");const [a,b]=st.split("/").map(Number);const tot=((a-1)+(+p)/100)/b*100;$("pbar").firstChild.style.width=tot+"%";$("expInfo").textContent=(b>1?(a===1?"Paso 1 de 2: preparando… ":"Paso 2 de 2: cortando y subtitulando… "):"Procesando… ")+Math.round(tot)+"%"};
+window.onExportProgress=s=>{const [st,p]=s.split(":");const [a,b]=st.split("/").map(Number);const tot=((a-1)+(+p)/100)/b*100;$("pbar").firstChild.style.width=tot+"%";
+  $("expInfo").textContent=(a<b?`Preparando toma ${a} de ${b-1}… `:"Uniendo y aplicando efectos… ")+Math.round(tot)+"%"};
 window.onExportDone=r=>{$("expBtn").disabled=false;
   if(r==="ok"){$("pbar").firstChild.style.width="100%";$("expBtn").textContent="✓ Exportado";$("expInfo").textContent="Listo. Guardado en Galería › Movies/Teleprompter."}
   else{$("expBtn").textContent="Reintentar exportación";$("expInfo").textContent="No se pudo exportar: "+r;$("pbar").style.display="none"}};
 $("shareBtn").onclick=async()=>{
-  if(APP){if(!await ready())return;if(!AndroidApp.hasShareable())AndroidApp.saveOriginal();AndroidApp.share();return}
-  const f=new File([blob],fileName(),{type:blob.type});
+  if(APP){if(!AndroidApp.hasShareable()){const t=takeOf(selPart);if(!t||!await takesReady([t.id]))return;AndroidApp.saveTake(t.id)}AndroidApp.share();return}
+  const t=takeOf(selPart);if(!t||!BL[t.id])return;const f=new File([BL[t.id]],fileName("",t.ext),{type:t.mime});
   if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:"Mi video"});return}catch(e){if(e.name==="AbortError")return}}
-  download(blobUrl,fileName())};
-function closeReview(){$("rv").classList.remove("on");$("rvv").pause();$("rvv").removeAttribute("src");$("saveOrig").textContent="Guardar original"}
-const reset=()=>{closeReview();scr.scrollTop=0;pos=0;heard=[];if(voiceReady)followTo(0,true);prog();showBar()};
-$("discard").onclick=reset;$("again").onclick=reset;
+  download(takeURL(t),fileName("",t.ext))};
 
 /* ---- Entrar / salir ---- */
-async function enter(withCam){
-  renderScript();cur=0;marked=0;heard=[];pr.classList.toggle("camon",withCam);pr.classList.add("on");document.body.style.overflow="hidden";
-  scr.scrollTop=0;pos=0;labels();prog();showBar();lockScreen();
+function partInfo(){const n=P.parts.length,k=takesOf(curPart).length;$("pinfo").textContent=`Parte ${curPart+1} de ${n}`+(k?` · ${k} toma${k>1?"s":""}`:"");pr.classList.toggle("multi",n>1)}
+function loadPart(i){
+  curPart=Math.max(0,Math.min(P.parts.length-1,i));renderScript(P.parts[curPart]);
+  cur=0;marked=0;heard=[];scr.scrollTop=0;pos=0;target=0;if(voiceReady)followTo(0,true);prog();partInfo();showBar();
+}
+async function enter(withCam,part){
+  if(!ensureProject()){projUI();$("projBox").scrollIntoView({behavior:"smooth"});return}
+  pr.classList.toggle("camon",withCam);pr.classList.add("on");document.body.style.overflow="hidden";
+  loadPart(part||0);labels();lockScreen();
   if(!APP&&pr.requestFullscreen&&!matchMedia("(display-mode: standalone)").matches)pr.requestFullscreen().catch(()=>{});
   let audioStream=null;
   if(withCam){if(await startCamera())audioStream=stream}
@@ -533,11 +779,13 @@ async function enter(withCam){
   }else if(audioStream)startAudio(audioStream);
   if(!voiceReady&&!withCam)countdown(playText);
 }
-function exit(){if(recording)stopRec();cancelCd();pauseText();stopVoice();stopAudio();stopCamera();pr.classList.remove("on","camon","voice");document.body.style.overflow="";
-  try{wake&&wake.release()}catch(e){}wake=null;if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})}
-$("startCam").onclick=()=>enter(true);$("startTxt").onclick=()=>enter(false);
+function exit(){if(recording)stopRec();cancelCd();pauseText();hideSheet();stopVoice();stopAudio();stopCamera();pr.classList.remove("on","camon","voice","multi");document.body.style.overflow="";
+  try{wake&&wake.release()}catch(e){}wake=null;if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});projUI()}
+$("startCam").onclick=()=>enter(true,0);$("startTxt").onclick=()=>enter(false,0);
 $("back").onclick=exit;$("pp").onclick=()=>isRunning()?pauseText():playText();
-$("rw").onclick=()=>{scr.scrollTop=0;pos=0;heard=[];if(voiceReady)followTo(0,true);prog()};
+$("rw").onclick=()=>loadPart(curPart);
+$("prevP").onclick=()=>{if(!recording)loadPart(curPart-1)};$("nextP").onclick=()=>{if(!recording)loadPart(curPart+1)};
+$("editB").onclick=()=>{if(!recording)openEditor(curPart)};
 $("slow").onclick=()=>speed(-10);$("fast").onclick=()=>speed(10);
 $("aminus").onclick=()=>font(-4);$("aplus").onclick=()=>font(4);
 $("flip").onclick=async()=>{if(recording)return;S.front=!S.front;$("front").checked=S.front;save();labels();
@@ -550,7 +798,7 @@ document.addEventListener("keydown",e=>{if(!pr.classList.contains("on")||$("rv")
   if(e.key===" "){e.preventDefault();isRunning()?pauseText():playText()}else if(e.key==="ArrowUp"){e.preventDefault();speed(10)}else if(e.key==="ArrowDown"){e.preventDefault();speed(-10)}
   else if(e.key==="+"||e.key==="=")font(4);else if(e.key==="-")font(-4);else if(e.key==="r"||e.key==="R")$("recb").click();else if(e.key==="Escape")exit()});
 window.__tpdbg=()=>recT0-vT0;
-window.appBack=()=>{if($("rv").classList.contains("on")){$("discard").click();return true}if(pr.classList.contains("on")){exit();return true}return false};
+window.appBack=()=>{if($("rv").classList.contains("on")){closeEditor();if(!pr.classList.contains("on"))projUI();return true}if($("ts").classList.contains("on")){hideSheet();return true}if(pr.classList.contains("on")){exit();return true}return false};
 
 /* ---- Instalación (versión web) ---- */
 const standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
@@ -558,7 +806,7 @@ if(!standalone&&!APP){const i=$("inst"),ios=/iphone|ipad|ipod/i.test(navigator.u
   i.innerHTML=ios?"Para tenerla como app: toca <b>Compartir</b> en Safari y luego <b>Agregar a pantalla de inicio</b>.":"Para tenerla como app: abre el menú <b>⋮</b> de Chrome y toca <b>Instalar app</b>.";
   i.style.display="block"}
 if(!APP&&"serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
-stats();labels();
+markMulti();projUI();stats();labels();
 }
 </script>
 </body>

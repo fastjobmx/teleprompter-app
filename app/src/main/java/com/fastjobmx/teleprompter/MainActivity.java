@@ -42,7 +42,10 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.OverlaySettings;
 import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.effect.MatrixTransformation;
 import androidx.media3.effect.OverlayEffect;
+import androidx.media3.effect.Presentation;
+import androidx.media3.effect.RgbMatrix;
 import androidx.media3.effect.StaticOverlaySettings;
 import androidx.media3.effect.TextOverlay;
 import androidx.media3.effect.TextureOverlay;
@@ -66,6 +69,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 
 @OptIn(markerClass = UnstableApi.class)
@@ -78,12 +83,11 @@ public class MainActivity extends Activity {
     private PermissionRequest pendingRequest;
     private final Handler main = new Handler(Looper.getMainLooper());
 
-    // Grabación recibida desde la página
+    // Tomas recibidas desde la página (se guardan en el almacenamiento interno de la app)
     private File tmpFile;
     private FileOutputStream tmpOut;
-    private File inputFile;
-    private String inputName = "video.mp4";
-    private String inputMime = "video/mp4";
+    private String tmpName = "toma.mp4";
+    private File takesDir, normDir;
 
     // Último archivo guardado en galería (para compartir)
     private Uri lastUri;
@@ -111,8 +115,13 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
 
+        takesDir = new File(getFilesDir(), "takes");
+        normDir = new File(getFilesDir(), "norm");
+        takesDir.mkdirs();
+        normDir.mkdirs();
         final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .addPathHandler("/takes/", new WebViewAssetLoader.InternalStoragePathHandler(this, takesDir))
                 .build();
 
         web.setWebViewClient(new WebViewClient() {
@@ -264,7 +273,7 @@ public class MainActivity extends Activity {
         return "ok";
     }
 
-    // ---------- Exportación con Media3 (cortar silencios + subtítulos) ----------
+    // ---------- Exportación con Media3: unir partes, cortes, zoom, color, fundidos y subtítulos ----------
 
     private static class Cue {
         final long s, e;
@@ -272,92 +281,211 @@ public class MainActivity extends Activity {
         Cue(long s, long e, String t) { this.s = s; this.e = e; this.t = t; }
     }
 
+    private static class Key {
+        final long t;
+        final float z;
+        final char m;
+        Key(long t, float z, char m) { this.t = t; this.z = z; this.m = m; }
+    }
+
+    private File takeFile(String id) {
+        File[] fs = takesDir.listFiles();
+        if (fs != null) for (File f : fs) if (f.getName().startsWith(id + ".")) return f;
+        return null;
+    }
+
+    private static String mimeOf(File f) {
+        return f.getName().endsWith(".webm") ? "video/webm" : "video/mp4";
+    }
+
     private void startExport(String json) {
         try {
-            if (inputFile == null || !inputFile.exists()) throw new Exception("no hay grabación");
             if (transformer != null) throw new Exception("ya hay una exportación en curso");
             JSONObject o = new JSONObject(json);
-            JSONArray seg = o.optJSONArray("segments");
-            JSONArray cj = o.optJSONArray("cues");
+            final JSONArray items = o.getJSONArray("items");
+            final int w = o.optInt("w", 1080), h = o.optInt("h", 1920);
             final String name = o.optString("name", "prompter-editado.mp4");
-            final List<Cue> cues = new ArrayList<>();
+
+            // Efectos que se aplican sobre el video ya unido (tiempo de salida)
+            final List<Effect> fx = new ArrayList<>();
+            JSONArray zj = o.optJSONArray("zooms");
+            if (zj != null && zj.length() > 0) {
+                List<Key> keys = new ArrayList<>();
+                for (int i = 0; i < zj.length(); i++) {
+                    JSONObject k = zj.getJSONObject(i);
+                    String m = k.optString("m", "c");
+                    keys.add(new Key(k.getLong("t") * 1000L, (float) k.getDouble("z"), m.isEmpty() ? 'c' : m.charAt(0)));
+                }
+                boolean any = false;
+                for (Key k : keys) if (Math.abs(k.z - 1f) > 0.001f) any = true;
+                if (any) fx.add(zoomEffect(keys));
+            }
+            String filter = o.optString("filter", "none");
+            JSONArray fj = o.optJSONArray("fades");
+            long[] fades = new long[fj == null ? 0 : fj.length()];
+            for (int i = 0; i < fades.length; i++) fades[i] = fj.getLong(i) * 1000L;
+            if (fades.length > 0 || !"none".equals(filter)) fx.add(colorEffect(filter, fades));
+            JSONArray cj = o.optJSONArray("cues");
+            List<Cue> cues = new ArrayList<>();
             if (cj != null) for (int i = 0; i < cj.length(); i++) {
                 JSONObject c = cj.getJSONObject(i);
                 cues.add(new Cue(c.getLong("s") * 1000L, c.getLong("e") * 1000L, c.getString("t")));
             }
-            final List<Effect> fx = new ArrayList<>();
             if (!cues.isEmpty()) fx.add(captionEffect(cues, o.optString("style", "box"),
                     o.optString("pos", "bottom"), (float) o.optDouble("scale", 1.0)));
 
-            final File out = new File(getCacheDir(), "export.mp4");
-            final Runnable finish = () -> {
-                try {
-                    lastUri = saveToGallery(out, name, "video/mp4");
-                    lastMime = "video/mp4";
-                    out.delete();
-                    js("onExportDone", "ok");
-                } catch (Exception e) {
-                    js("onExportDone", "error al guardar: " + e.getMessage());
-                }
-            };
-
-            if (seg != null && seg.length() > 0) {
-                // Paso 1: convertir la grabación a un MP4 normal (con índice para poder cortar).
-                // Paso 2: unir solo los tramos con voz y agregar subtítulos.
-                final File norm = new File(getCacheDir(), "normal.mp4");
-                final JSONArray segments = seg;
-                steps = 2; step = 1;
-                run(single(Uri.fromFile(inputFile), new ArrayList<>()), norm, () -> {
-                    try {
-                        step = 2;
-                        run(clipped(Uri.fromFile(norm), segments, fx), out, () -> { norm.delete(); finish.run(); });
-                    } catch (Exception e) {
-                        js("onExportDone", e.getMessage());
-                    }
-                });
-            } else {
-                steps = 1; step = 1;
-                run(single(Uri.fromFile(inputFile), fx), out, finish);
+            // Tomas que hay que preparar (convertir a MP4 con índice para poder cortarlas)
+            final LinkedHashMap<String, File> src = new LinkedHashMap<>();
+            for (int i = 0; i < items.length(); i++) {
+                String id = items.getJSONObject(i).getString("take");
+                File f = takeFile(id);
+                if (f == null) throw new Exception("falta la toma de la parte " + (i + 1) + ", vuelve a grabarla");
+                src.put(id, f);
             }
+            final List<String> todo = new ArrayList<>();
+            for (Map.Entry<String, File> e : src.entrySet()) {
+                File n = new File(normDir, e.getKey() + ".mp4");
+                if (!n.exists() || n.length() == 0) todo.add(e.getKey());
+            }
+            steps = todo.size() + 1;
+            final File out = new File(getCacheDir(), "export.mp4");
+            normalizeNext(todo, 0, src, () -> {
+                try {
+                    step = steps;
+                    run(compose(items, w, h, fx), out, () -> {
+                        try {
+                            lastUri = saveToGallery(out, name, "video/mp4");
+                            lastMime = "video/mp4";
+                            out.delete();
+                            js("onExportDone", "ok");
+                        } catch (Exception e) {
+                            js("onExportDone", "error al guardar: " + e.getMessage());
+                        }
+                    });
+                } catch (Exception e) {
+                    js("onExportDone", String.valueOf(e.getMessage()));
+                }
+            });
         } catch (Exception e) {
             js("onExportDone", String.valueOf(e.getMessage()));
         }
     }
 
-    private Composition single(Uri uri, List<Effect> fx) {
-        EditedMediaItem item = new EditedMediaItem.Builder(MediaItem.fromUri(uri)).build();
-        List<EditedMediaItem> items = new ArrayList<>();
-        items.add(item);
-        return new Composition.Builder(EditedMediaItemSequence.withAudioAndVideoFrom(items))
+    private void normalizeNext(List<String> ids, int i, Map<String, File> src, Runnable done) {
+        if (i >= ids.size()) { done.run(); return; }
+        step = i + 1;
+        String id = ids.get(i);
+        File dst = new File(normDir, id + ".mp4");
+        File part = new File(normDir, id + ".tmp.mp4");
+        EditedMediaItem item = new EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(src.get(id)))).build();
+        List<EditedMediaItem> list = new ArrayList<>();
+        list.add(item);
+        Composition c = new Composition.Builder(EditedMediaItemSequence.withAudioAndVideoFrom(list)).build();
+        run(c, part, () -> {
+            dst.delete();
+            if (!part.renameTo(dst)) { js("onExportDone", "no se pudo preparar la toma"); return; }
+            normalizeNext(ids, i + 1, src, done);
+        });
+    }
+
+    private Composition compose(JSONArray items, int w, int h, List<Effect> fx) throws Exception {
+        List<EditedMediaItem> list = new ArrayList<>();
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject it = items.getJSONObject(i);
+            Uri uri = Uri.fromFile(new File(normDir, it.getString("take") + ".mp4"));
+            JSONArray segs = it.getJSONArray("segs");
+            for (int j = 0; j < segs.length(); j++) {
+                JSONArray r = segs.getJSONArray(j);
+                long a = r.getLong(0), b = r.getLong(1);
+                if (b - a < 100) continue;
+                MediaItem mi = new MediaItem.Builder()
+                        .setUri(uri)
+                        .setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder()
+                                .setStartPositionMs(a)
+                                .setEndPositionMs(b)
+                                .build())
+                        .build();
+                List<Effect> itemFx = new ArrayList<>();
+                // Todas las partes al mismo tamaño y formato (recorta para llenar)
+                itemFx.add(Presentation.createForWidthAndHeight(w, h, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP));
+                list.add(new EditedMediaItem.Builder(mi)
+                        .setEffects(new Effects(new ArrayList<AudioProcessor>(), itemFx))
+                        .build());
+            }
+        }
+        if (list.isEmpty()) throw new Exception("no quedó ningún tramo con voz");
+        return new Composition.Builder(EditedMediaItemSequence.withAudioAndVideoFrom(list))
                 .setEffects(new Effects(new ArrayList<AudioProcessor>(), fx))
                 .build();
     }
 
-    private Composition clipped(Uri uri, JSONArray seg, List<Effect> fx) throws Exception {
-        List<EditedMediaItem> items = new ArrayList<>();
-        for (int i = 0; i < seg.length(); i++) {
-            JSONArray r = seg.getJSONArray(i);
-            long a = r.getLong(0), b = r.getLong(1);
-            if (b - a < 100) continue;
-            MediaItem mi = new MediaItem.Builder()
-                    .setUri(uri)
-                    .setClippingConfiguration(new MediaItem.ClippingConfiguration.Builder()
-                            .setStartPositionMs(a)
-                            .setEndPositionMs(b)
-                            .build())
-                    .build();
-            items.add(new EditedMediaItem.Builder(mi).build());
+    /** Zoom animado: 'c' = cambio inmediato (corte), 'e' = suave en 0,3 s, 'l' = lineal desde la clave anterior. */
+    private static float zoomAt(List<Key> keys, long t) {
+        float pz = 1f;
+        long pt = 0;
+        for (Key k : keys) {
+            if (t < k.t) {
+                if (k.m == 'l') {
+                    long d = k.t - pt;
+                    return d > 0 ? pz + (k.z - pz) * Math.max(0f, (float) (t - pt) / d) : k.z;
+                }
+                if (k.m == 'e' && t > k.t - 300_000L) {
+                    float f = (float) (t - (k.t - 300_000L)) / 300_000f;
+                    return pz + (k.z - pz) * (1 - (1 - f) * (1 - f));
+                }
+                return pz;
+            }
+            pz = k.z;
+            pt = k.t;
         }
-        if (items.isEmpty()) throw new Exception("no quedó ningún tramo con voz");
-        return new Composition.Builder(EditedMediaItemSequence.withAudioAndVideoFrom(items))
-                .setEffects(new Effects(new ArrayList<AudioProcessor>(), fx))
-                .build();
+        return pz;
+    }
+
+    private Effect zoomEffect(final List<Key> keys) {
+        return (MatrixTransformation) presentationTimeUs -> {
+            float z = zoomAt(keys, presentationTimeUs);
+            android.graphics.Matrix m = new android.graphics.Matrix();
+            m.setScale(z, z);
+            return m;
+        };
+    }
+
+    /** Filtro de color + fundido a negro entre partes. Matriz 4x4 en orden por columnas. */
+    private Effect colorEffect(String filter, final long[] fades) {
+        final float[] base = new float[16];
+        android.opengl.Matrix.setIdentityM(base, 0);
+        switch (filter) {
+            case "bw": {
+                float r = 0.2126f, g = 0.7152f, b = 0.0722f;
+                for (int row = 0; row < 3; row++) { base[row] = r; base[4 + row] = g; base[8 + row] = b; }
+                break;
+            }
+            case "vivid": {
+                float s = 1.3f, r = 0.2126f * (1 - s), g = 0.7152f * (1 - s), b = 0.0722f * (1 - s);
+                for (int row = 0; row < 3; row++) { base[row] = r; base[4 + row] = g; base[8 + row] = b; }
+                base[0] += s; base[5] += s; base[10] += s;
+                break;
+            }
+            case "warm": base[0] = 1.08f; base[5] = 1.0f; base[10] = 0.88f; break;
+            case "cool": base[0] = 0.9f; base[5] = 1.0f; base[10] = 1.08f; break;
+            default: break;
+        }
+        return (RgbMatrix) (presentationTimeUs, useHdr) -> {
+            float f = 1f;
+            for (long b : fades) {
+                long d = Math.abs(presentationTimeUs - b);
+                if (d < 180_000L) f = Math.min(f, d / 180_000f);
+            }
+            float[] m = base.clone();
+            if (f < 1f) for (int col = 0; col < 3; col++) for (int row = 0; row < 3; row++) m[col * 4 + row] *= f;
+            return m;
+        };
     }
 
     private Effect captionEffect(final List<Cue> cues, String style, String pos, float scale) {
         final int color = "yellow".equals(style) ? Color.parseColor("#FFD60A") : Color.WHITE;
         final boolean boxed = "box".equals(style);
-        final float size = Math.max(0.4f, scale) * ("box".equals(style) ? 0.72f : 0.95f);
+        final float size = Math.max(0.4f, scale) * (boxed ? 0.72f : 0.95f);
         final float y = "top".equals(pos) ? 0.72f : "mid".equals(pos) ? 0f : -0.68f;
         final OverlaySettings settings = new StaticOverlaySettings.Builder()
                 .setBackgroundFrameAnchor(0f, y)
@@ -424,6 +552,14 @@ public class MainActivity extends Activity {
         main.postDelayed(this::poll, 500);
     }
 
+    private static void deleteRecursive(File f) {
+        if (f.isDirectory()) {
+            File[] fs = f.listFiles();
+            if (fs != null) for (File c : fs) deleteRecursive(c);
+        }
+        f.delete();
+    }
+
     // ---------- Puente con la página ----------
 
     private class Bridge {
@@ -436,9 +572,7 @@ public class MainActivity extends Activity {
                 if (tmpOut != null) try { tmpOut.close(); } catch (Exception ignored) { }
                 tmpFile = new File(getCacheDir(), "recibiendo.tmp");
                 tmpOut = new FileOutputStream(tmpFile, false);
-                inputName = name;
-                inputMime = (mime == null || mime.isEmpty()) ? "video/mp4" : mime.split(";")[0];
-                lastUri = null;
+                tmpName = name;
                 return true;
             } catch (Exception e) {
                 return false;
@@ -456,16 +590,14 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public synchronized String finishRecording() {
+        public synchronized String finishTake(String id) {
             try {
                 tmpOut.close();
                 tmpOut = null;
-                String ext = inputMime.contains("webm") ? ".webm" : ".mp4";
-                File dest = new File(getCacheDir(), "grabacion" + ext);
-                if (inputFile != null) inputFile.delete();
+                String ext = tmpName.endsWith(".webm") ? ".webm" : ".mp4";
+                File dest = new File(takesDir, id + ext);
                 dest.delete();
-                if (!tmpFile.renameTo(dest)) throw new Exception("no se pudo preparar");
-                inputFile = dest;
+                if (!tmpFile.renameTo(dest)) throw new Exception("no se pudo guardar la toma");
                 return "ok";
             } catch (Exception e) {
                 return "error: " + e.getMessage();
@@ -473,11 +605,28 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public synchronized String saveOriginal() {
+        public synchronized void deleteTake(String id) {
+            File f = takeFile(id);
+            if (f != null) f.delete();
+            new File(normDir, id + ".mp4").delete();
+        }
+
+        @JavascriptInterface
+        public synchronized void clearTakes() {
+            deleteRecursive(takesDir);
+            deleteRecursive(normDir);
+            takesDir.mkdirs();
+            normDir.mkdirs();
+            lastUri = null;
+        }
+
+        @JavascriptInterface
+        public synchronized String saveTake(String id) {
             try {
-                if (inputFile == null) return "no hay grabación";
-                lastUri = saveToGallery(inputFile, inputName, inputMime);
-                lastMime = inputMime;
+                File f = takeFile(id);
+                if (f == null) return "no encontré la toma";
+                lastUri = saveToGallery(f, "prompter-" + id + (f.getName().endsWith(".webm") ? ".webm" : ".mp4"), mimeOf(f));
+                lastMime = mimeOf(f);
                 return lastUri != null ? "ok" : "error";
             } catch (Exception e) {
                 return "error: " + e.getMessage();
