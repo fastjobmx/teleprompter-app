@@ -26,3 +26,9 @@ Los videos se guardan en **Galería › Movies/Teleprompter**.
 
 - [Vosk](https://alphacephei.com/vosk/) y [vosk-browser](https://github.com/ccoreilly/vosk-browser) (Apache 2.0) para el reconocimiento de voz.
 - Ideas de [smart-teleprompter-android](https://github.com/xdadrm/smart-teleprompter-android) (filtro de ruido), [CueCam](https://github.com/lustsazeus-lab/CueCam) y [OpenCut Mobile](https://github.com/Inexra/opencut-mobile) (exportación con Media3).
+
+## v3.1
+
+- **Subtítulos estilo redes**: Karaoke, Caja, Impacto, Cómic, Neón, Limpio y Minimal, con la palabra que dices resaltada, color de acento, tamaño y palabras por pantalla.
+- **Micrófono externo**: detecta receptores USB-C (DJI, Hollyland, Boya, Rode…) y Bluetooth, y graba sin filtros de ruido para que suene natural.
+- Fuentes: Montserrat, Anton y Bangers (SIL Open Font License, ver `web/fonts/`).

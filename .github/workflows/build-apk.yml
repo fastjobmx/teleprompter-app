@@ -18,6 +18,7 @@ jobs:
         run: |
           mkdir -p app/src/main/assets/www
           cp web/index.html web/manifest.webmanifest web/icon-*.png web/vosk.js app/src/main/assets/www/
+          cp -r web/fonts app/src/main/assets/www/
 
       - name: Descargar modelo de voz en español (Vosk, sin internet)
         run: |
@@ -51,7 +52,7 @@ jobs:
           name: Teleprompter 3.0.${{ github.run_number }}
           body: |
             Descarga **Teleprompter.apk** desde el celular e instálalo.
-            Novedades: grabación por partes con varias tomas, edición con zoom automático, fundidos, filtros de color y formatos 9:16, 1:1 y 16:9.
+            Novedades: subtítulos estilo redes (7 estilos palabra por palabra), selección de micrófono externo (USB, inalámbrico, Bluetooth), grabación por partes y edición con efectos.
           files: Teleprompter.apk
           make_latest: true
 

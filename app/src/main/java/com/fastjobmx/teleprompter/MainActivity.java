@@ -10,6 +10,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
@@ -169,6 +171,8 @@ public class MainActivity extends Activity {
             need.add(Manifest.permission.CAMERA);
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
             need.add(Manifest.permission.RECORD_AUDIO);
+        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+            need.add(Manifest.permission.BLUETOOTH_CONNECT);
         if (Build.VERSION.SDK_INT < 29 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
             need.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         if (need.isEmpty()) grantPending();
@@ -275,12 +279,6 @@ public class MainActivity extends Activity {
 
     // ---------- Exportación con Media3: unir partes, cortes, zoom, color, fundidos y subtítulos ----------
 
-    private static class Cue {
-        final long s, e;
-        final String t;
-        Cue(long s, long e, String t) { this.s = s; this.e = e; this.t = t; }
-    }
-
     private static class Key {
         final long t;
         final float z;
@@ -326,13 +324,7 @@ public class MainActivity extends Activity {
             for (int i = 0; i < fades.length; i++) fades[i] = fj.getLong(i) * 1000L;
             if (fades.length > 0 || !"none".equals(filter)) fx.add(colorEffect(filter, fades));
             JSONArray cj = o.optJSONArray("cues");
-            List<Cue> cues = new ArrayList<>();
-            if (cj != null) for (int i = 0; i < cj.length(); i++) {
-                JSONObject c = cj.getJSONObject(i);
-                cues.add(new Cue(c.getLong("s") * 1000L, c.getLong("e") * 1000L, c.getString("t")));
-            }
-            if (!cues.isEmpty()) fx.add(captionEffect(cues, o.optString("style", "box"),
-                    o.optString("pos", "bottom"), (float) o.optDouble("scale", 1.0)));
+            if (cj != null && cj.length() > 0) fx.add(captionEffect(o, cj, w, h));
 
             // Tomas que hay que preparar (convertir a MP4 con índice para poder cortarlas)
             final LinkedHashMap<String, File> src = new LinkedHashMap<>();
@@ -482,41 +474,181 @@ public class MainActivity extends Activity {
         };
     }
 
-    private Effect captionEffect(final List<Cue> cues, String style, String pos, float scale) {
-        final int color = "yellow".equals(style) ? Color.parseColor("#FFD60A") : Color.WHITE;
-        final boolean boxed = "box".equals(style);
-        final float size = Math.max(0.4f, scale) * (boxed ? 0.72f : 0.95f);
-        final float y = "top".equals(pos) ? 0.72f : "mid".equals(pos) ? 0f : -0.68f;
-        final OverlaySettings settings = new StaticOverlaySettings.Builder()
-                .setBackgroundFrameAnchor(0f, y)
-                .build();
-        final SpannableString empty = new SpannableString(" ");
-        TextOverlay overlay = new TextOverlay() {
-            @Override
-            public SpannableString getText(long presentationTimeUs) {
-                for (Cue c : cues) {
-                    if (presentationTimeUs >= c.s && presentationTimeUs < c.e) return styled(c.t);
+    // ---------- Subtítulos estilo redes (palabra por palabra) ----------
+
+    private static class CapWord {
+        final String t;
+        final long s, e;
+        CapWord(String t, long s, long e) { this.t = t; this.s = s; this.e = e; }
+    }
+
+    private static class CapCue {
+        final long s, e;
+        final CapWord[] w;
+        CapCue(long s, long e, CapWord[] w) { this.s = s; this.e = e; this.w = w; }
+    }
+
+    private Typeface capFont(String style) {
+        try {
+            if ("pop".equals(style)) return Typeface.createFromAsset(getAssets(), "www/fonts/Anton-Regular.ttf");
+            if ("comic".equals(style)) return Typeface.createFromAsset(getAssets(), "www/fonts/Bangers-Regular.ttf");
+            int wt = "minimal".equals(style) ? 600 : "clean".equals(style) ? 700 : "neon".equals(style) ? 800 : 900;
+            if (Build.VERSION.SDK_INT >= 26) {
+                return new Typeface.Builder(getAssets(), "www/fonts/Montserrat-VF.ttf")
+                        .setFontVariationSettings("'wght' " + wt).build();
+            }
+        } catch (Exception ignored) { }
+        return Typeface.DEFAULT_BOLD;
+    }
+
+    private class CaptionOverlay extends androidx.media3.effect.BitmapOverlay {
+        private final List<CapCue> cues;
+        private final String style;
+        private final int accent;
+        private final boolean upper;
+        private final float size;
+        private final int vw;
+        private final OverlaySettings settings;
+        private final Typeface tf;
+        private final android.graphics.Bitmap empty = android.graphics.Bitmap.createBitmap(2, 2, android.graphics.Bitmap.Config.ARGB_8888);
+        private android.graphics.Bitmap cache = empty;
+        private String key = "";
+
+        CaptionOverlay(List<CapCue> cues, String style, int accent, boolean upper, float fontFactor, float userSize, int w, int h, String pos) {
+            this.cues = cues;
+            this.style = style;
+            this.accent = accent;
+            this.upper = upper;
+            this.vw = w;
+            this.size = Math.min(w, h) * fontFactor * userSize;
+            this.tf = capFont(style);
+            float y = "top".equals(pos) ? 0.7f : "mid".equals(pos) ? 0f : -0.6f;
+            this.settings = new StaticOverlaySettings.Builder().setBackgroundFrameAnchor(0f, y).build();
+        }
+
+        @Override
+        public android.graphics.Bitmap getBitmap(long t) {
+            int ci = -1;
+            for (int i = 0; i < cues.size(); i++) {
+                CapCue c = cues.get(i);
+                if (t >= c.s && t < c.e) { ci = i; break; }
+            }
+            if (ci < 0) { key = ""; return empty; }
+            CapCue c = cues.get(ci);
+            int a = -1;
+            if (!"clean".equals(style)) for (int i = 0; i < c.w.length; i++) if (t >= c.w[i].s) a = i;
+            String k = ci + ":" + a;
+            if (!k.equals(key)) { cache = draw(c, a); key = k; }
+            return cache;
+        }
+
+        @Override
+        public OverlaySettings getOverlaySettings(long presentationTimeUs) { return settings; }
+
+        private android.graphics.Bitmap draw(CapCue c, int a) {
+            boolean grow = "pop".equals(style) || "comic".equals(style);
+            boolean stroke = "karaoke".equals(style) || "box".equals(style) || grow;
+            android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            p.setTypeface(tf);
+            p.setTextSize(size);
+            float space = p.measureText(" ") * ("clean".equals(style) ? 1f : 1.2f);
+            String[] words = new String[c.w.length];
+            float[] wid = new float[c.w.length];
+            for (int i = 0; i < words.length; i++) {
+                words[i] = upper ? c.w[i].t.toUpperCase() : c.w[i].t;
+                p.setTextSize(size * (grow && i == a ? 1.12f : 1f));
+                wid[i] = p.measureText(words[i]);
+            }
+            // Repartir en líneas (máximo 3)
+            float maxW = vw * 0.86f;
+            List<int[]> lines = new ArrayList<>();
+            List<Float> lw = new ArrayList<>();
+            int start = 0;
+            float cur = 0;
+            for (int i = 0; i < words.length; i++) {
+                float add = (i == start ? 0 : space) + wid[i];
+                if (i > start && cur + add > maxW && lines.size() < 2) {
+                    lines.add(new int[]{start, i});
+                    lw.add(cur);
+                    start = i;
+                    cur = wid[i];
+                } else cur += add;
+            }
+            lines.add(new int[]{start, words.length});
+            lw.add(cur);
+            float maxLine = 0;
+            for (float x : lw) maxLine = Math.max(maxLine, x);
+            float sw = stroke ? size * 0.16f : 0;
+            float pad = size * 0.45f + sw + ("neon".equals(style) ? size * 0.5f : 0);
+            float lineH = size * 1.22f;
+            int bw = (int) Math.ceil(Math.min(maxLine, vw) + pad * 2);
+            int bh = (int) Math.ceil(lines.size() * lineH + pad * 2);
+            android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(Math.max(2, bw), Math.max(2, bh), android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas cv = new android.graphics.Canvas(bmp);
+            if ("clean".equals(style)) {
+                android.graphics.Paint bg = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+                bg.setColor(0xAD000000);
+                cv.drawRoundRect(new android.graphics.RectF(pad * 0.4f, pad * 0.4f, bw - pad * 0.4f, bh - pad * 0.4f), size * 0.3f, size * 0.3f, bg);
+            }
+            float base = pad + size * 0.92f;
+            for (int li = 0; li < lines.size(); li++) {
+                int[] r = lines.get(li);
+                float x = (bw - lw.get(li)) / 2f;
+                for (int i = r[0]; i < r[1]; i++) {
+                    boolean act = i == a, past = i < a;
+                    float ts = size * (grow && act ? 1.12f : 1f);
+                    p.setTextSize(ts);
+                    p.clearShadowLayer();
+                    if ("box".equals(style) && act) {
+                        android.graphics.Paint bp = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+                        bp.setColor(accent);
+                        cv.drawRoundRect(new android.graphics.RectF(x - size * 0.14f, base - size * 0.86f, x + wid[i] + size * 0.14f, base + size * 0.2f), size * 0.18f, size * 0.18f, bp);
+                    }
+                    int fill;
+                    switch (style) {
+                        case "karaoke": case "pop": case "neon": fill = act ? accent : Color.WHITE; break;
+                        case "comic": fill = act ? Color.WHITE : accent; break;
+                        case "minimal": fill = act || past ? Color.WHITE : 0xB3FFFFFF; break;
+                        default: fill = Color.WHITE;
+                    }
+                    float yy = base + (grow && act ? size * 0.04f : 0);
+                    if (sw > 0) {
+                        p.setStyle(android.graphics.Paint.Style.STROKE);
+                        p.setStrokeWidth(sw);
+                        p.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+                        p.setColor(Color.BLACK);
+                        cv.drawText(words[i], x, yy, p);
+                    }
+                    p.setStyle(android.graphics.Paint.Style.FILL);
+                    if ("neon".equals(style)) p.setShadowLayer(size * 0.35f, 0, 0, accent);
+                    else if ("minimal".equals(style)) p.setShadowLayer(size * 0.15f, 0, size * 0.05f, 0xB3000000);
+                    p.setColor(fill);
+                    cv.drawText(words[i], x, yy, p);
+                    x += wid[i] + space;
                 }
-                return empty;
+                base += lineH;
             }
+            return bmp;
+        }
+    }
 
-            private SpannableString styled(String t) {
-                SpannableString sp = new SpannableString(boxed ? " " + t + " " : t);
-                int n = sp.length();
-                sp.setSpan(new ForegroundColorSpan(color), 0, n, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                sp.setSpan(new StyleSpan(Typeface.BOLD), 0, n, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                sp.setSpan(new RelativeSizeSpan(size), 0, n, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                sp.setSpan(new BackgroundColorSpan(boxed ? 0xB3000000 : 0x66000000), 0, n, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                return sp;
+    private Effect captionEffect(JSONObject o, JSONArray cj, int w, int h) throws Exception {
+        List<CapCue> cues = new ArrayList<>();
+        for (int i = 0; i < cj.length(); i++) {
+            JSONObject c = cj.getJSONObject(i);
+            JSONArray ws = c.getJSONArray("w");
+            CapWord[] arr = new CapWord[ws.length()];
+            for (int j = 0; j < ws.length(); j++) {
+                JSONArray x = ws.getJSONArray(j);
+                arr[j] = new CapWord(x.getString(0), x.getLong(1) * 1000L, x.getLong(2) * 1000L);
             }
-
-            @Override
-            public OverlaySettings getOverlaySettings(long presentationTimeUs) {
-                return settings;
-            }
-        };
+            if (arr.length > 0) cues.add(new CapCue(c.getLong("s") * 1000L, c.getLong("e") * 1000L, arr));
+        }
+        int accent;
+        try { accent = Color.parseColor(o.optString("color", "#FFD60A")); } catch (Exception e) { accent = Color.parseColor("#FFD60A"); }
         List<TextureOverlay> list = new ArrayList<>();
-        list.add(overlay);
+        list.add(new CaptionOverlay(cues, o.optString("style", "karaoke"), accent, o.optBoolean("upper", true),
+                (float) o.optDouble("font", 0.075), (float) o.optDouble("size", 1.0), w, h, o.optString("pos", "bottom")));
         return new OverlayEffect(list);
     }
 
@@ -635,6 +767,34 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public boolean hasShareable() { return lastUri != null; }
+
+        /** Lista de micrófonos que Android reconoce (para diagnóstico). */
+        @JavascriptInterface
+        public String micInfo() {
+            JSONArray a = new JSONArray();
+            try {
+                AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                for (AudioDeviceInfo d : am.getDevices(AudioManager.GET_DEVICES_INPUTS)) {
+                    String t;
+                    switch (d.getType()) {
+                        case AudioDeviceInfo.TYPE_BUILTIN_MIC: t = "micrófono integrado"; break;
+                        case AudioDeviceInfo.TYPE_USB_DEVICE: t = "USB"; break;
+                        case AudioDeviceInfo.TYPE_USB_HEADSET: t = "USB (headset)"; break;
+                        case AudioDeviceInfo.TYPE_USB_ACCESSORY: t = "USB (accesorio)"; break;
+                        case AudioDeviceInfo.TYPE_WIRED_HEADSET: t = "cable/jack"; break;
+                        case AudioDeviceInfo.TYPE_BLUETOOTH_SCO: t = "Bluetooth"; break;
+                        case AudioDeviceInfo.TYPE_TELEPHONY: continue;
+                        default: t = "tipo " + d.getType();
+                    }
+                    CharSequence n = d.getProductName();
+                    String s = t + (n != null && n.length() > 0 && !n.toString().equals(Build.MODEL) ? " (" + n + ")" : "");
+                    boolean dup = false;
+                    for (int i = 0; i < a.length(); i++) if (a.optString(i).equals(s)) dup = true;
+                    if (!dup) a.put(s);
+                }
+            } catch (Exception ignored) { }
+            return a.toString();
+        }
 
         @JavascriptInterface
         public void exportVideo(String json) { main.post(() -> startExport(json)); }

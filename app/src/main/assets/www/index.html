@@ -14,6 +14,9 @@
 <link rel="icon" href="icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
+@font-face{font-family:CapMont;src:url(fonts/Montserrat-VF.ttf) format("truetype");font-weight:100 900;font-display:swap}
+@font-face{font-family:CapAnton;src:url(fonts/Anton-Regular.ttf) format("truetype");font-display:swap}
+@font-face{font-family:CapBangers;src:url(fonts/Bangers-Regular.ttf) format("truetype");font-display:swap}
 :root{--bg:#0b0b0c;--ink:#f2f2f2;--card:#18181b;--line:#2a2a2e;--mut:#a1a1a8;--rec:#ff3b30;--ok:#34c759}
 *{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Lexend,system-ui,sans-serif;overflow-x:clip}
@@ -100,8 +103,15 @@ select{width:100%;min-height:44px;margin:6px 0 10px;border-radius:10px;border:1p
 #rv.on{display:flex}
 #vwrap{position:relative;flex:1 1 40vh;min-height:30vh;display:flex}
 #rvv{width:100%;height:100%;object-fit:contain;background:#000}
-#cap{position:absolute;left:8%;right:8%;bottom:14%;text-align:center;font:700 clamp(16px,4.6vw,26px)/1.25 Lexend,sans-serif;pointer-events:none}
-#cap span{padding:2px 8px;border-radius:6px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+#cap{position:absolute;left:6%;right:6%;bottom:22%;text-align:center;font:700 clamp(16px,4.6vw,26px)/1.25 Lexend,sans-serif;pointer-events:none}
+#cap{line-height:1.2}
+.cw{display:inline-block;margin:0 .13em;white-space:nowrap;border-radius:.18em;padding:0 .08em}
+.cl{display:inline;padding:.08em .35em;border-radius:.3em;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+#capStyles{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:8px 0}
+#capStyles button{min-height:74px;border-radius:12px;border:2px solid #333;background:#2b2f36 linear-gradient(160deg,#3a4250,#1d2027);color:#fff;cursor:pointer;padding:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;overflow:hidden}
+#capStyles button.on{border-color:var(--rec)}
+#capStyles small{font:600 12px Lexend,sans-serif;color:#ddd}
+#capStyles .smp{font-size:19px;line-height:1.1;text-align:center}
 #cap.top{bottom:auto;top:12%}#cap.mid{bottom:auto;top:45%}
 #panel{flex:0 1 auto;max-height:58vh;overflow-y:auto;padding:12px 2px calc(env(safe-area-inset-bottom) + 14px)}
 .box{background:#121214;border:1px solid #26262a;border-radius:14px;padding:12px 14px;margin-bottom:10px}
@@ -195,6 +205,14 @@ select{width:100%;min-height:44px;margin:6px 0 10px;border-radius:10px;border:1p
     <label class="tg"><input type="checkbox" id="mx">Espejo horizontal</label>
     <label class="tg"><input type="checkbox" id="my">Espejo vertical</label>
   </div>
+  <h2>Micrófono</h2>
+  <div class="ctl">
+    <label for="micSel">¿Qué micrófono usar?</label>
+    <select id="micSel"><option value="auto">Automático: usa el externo si está conectado</option><option value="builtin">Micrófono del celular</option></select>
+    <label class="tg" style="margin:4px 0 10px"><input type="checkbox" id="micRaw">Sin filtros de ruido (recomendado para micrófonos externos)</label>
+  </div>
+  <div class="row" style="margin-top:10px"><button class="sec" id="micScan">Buscar micrófonos</button></div>
+  <p class="note" id="micInfo">Conecta el receptor de tu micrófono inalámbrico y toca «Buscar micrófonos».</p>
   <p class="note">El texto nunca sale en el video. En modo voz, los subtítulos se generan solos mientras grabas.</p>
 </main>
 
@@ -258,7 +276,13 @@ select{width:100%;min-height:44px;margin:6px 0 10px;border-radius:10px;border:1p
     <div class="box">
       <h3>Subtítulos</h3>
       <label class="tg"><input type="checkbox" id="xCap">Poner subtítulos en el video</label>
-      <select id="capSty"><option value="box">Blanco con fondo oscuro</option><option value="yellow">Amarillo grande</option><option value="upper">MAYÚSCULAS estilo redes</option></select>
+      <label class="ed-l">Estilo</label>
+      <div id="capStyles"></div>
+      <label class="ed-l">Color de resaltado</label><div class="sw" id="capColSw"></div>
+      <label class="ed-l" for="capN">Palabras en pantalla</label>
+      <select id="capN"><option value="auto">Automático según el estilo</option><option value="1">1 palabra</option><option value="2">2 palabras</option><option value="3">3 palabras</option><option value="frase">Frase corta</option></select>
+      <label class="ed-l" for="capSize">Tamaño <b id="capSize_v"></b></label><input type="range" id="capSize" min="0.7" max="1.5" step="0.05">
+      <label class="ed-l" for="capPos">Posición</label>
       <select id="capPos"><option value="bottom">Abajo</option><option value="mid">Centro</option><option value="top">Arriba</option></select>
       <p id="capInfo"></p>
       <div class="acts"><button id="srtBtn">Guardar subtítulos .srt</button><button id="srtCopy">Copiar subtítulos</button></div>
@@ -284,12 +308,12 @@ const $=id=>document.getElementById(id);
 const APP=!!(window.AndroidApp&&AndroidApp.isApp&&AndroidApp.isApp());
 const COLORS=["#ffffff","#ffd60a","#7cff6b","#5ac8fa","#ff9f0a","#ff6b9a"];
 const S={mode:"voz",sp:60,fs:44,lh:1.35,tc:"#ffffff",hc:"#ffd60a",ta:"left",by:0,bh:45,bw:100,op:55,gy:22,cdn:3,front:true,hq:true,mx:false,my:false,txt:"",
-  silLvl:"0.6",capSty:"box",capPos:"bottom",xSil:true,xCap:true,multi:false,zoom:"auto",trans:"fade",filt:"none",fmt:"9x16"};
+  silLvl:"0.6",capSty:"karaoke",capCol:"#ffd60a",capN:"auto",capSize:1,capPos:"bottom",xSil:true,xCap:true,mic:"auto",micLabel:"",micRaw:true,multi:false,zoom:"auto",trans:"fade",filt:"none",fmt:"9x16"};
 try{Object.assign(S,JSON.parse(localStorage.getItem("tp3")||localStorage.getItem("tp2")||"{}"))}catch(e){}
 if(!S.txt)S.txt="Hola a todos, bienvenidos.\n\nEste es un texto de ejemplo. Reemplázalo con tu propio guion.\n\nEn modo voz, el texto avanza mientras hablas y se detiene cuando haces una pausa.\n\nMira al lente de la cámara y habla con naturalidad.\n\n¡Mucho éxito con tu grabación!";
 const save=()=>{try{localStorage.setItem("tp3",JSON.stringify(S))}catch(e){}};
 const src=$("src"),pr=$("pr"),scr=$("scr"),txt=$("txt"),cam=$("cam"),box=$("box");
-const RANGES=["sp","fs","lh","by","bh","bw","op","gy","cdn"],CHECKS=["front","hq","mx","my","xSil","xCap"],SELECTS=["ta","silLvl","capSty","capPos","zoom","trans","filt","fmt"];
+const RANGES=["sp","fs","lh","by","bh","bw","op","gy","cdn","capSize"],CHECKS=["front","hq","mx","my","xSil","xCap","micRaw"],SELECTS=["ta","silLvl","capPos","capN","zoom","trans","filt","fmt"];
 src.value=S.txt;RANGES.forEach(k=>$(k).value=S[k]);CHECKS.forEach(k=>$(k).checked=S[k]);SELECTS.forEach(k=>$(k).value=S[k]);
 const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")};
 const UNITS={fs:" px",by:"%",bh:"%",bw:"%",op:"%",gy:"%"};
@@ -303,7 +327,7 @@ $("modeSeg").onclick=e=>{const b=e.target.closest("button");if(b){S.mode=b.datas
 
 function stats(){const w=(src.value.trim().match(/\S+/g)||[]).length;$("wc").textContent=w+" palabras";$("est").textContent="≈ "+fmt(w/150*60)+" leyendo a ritmo normal"}
 function labels(){
-  RANGES.forEach(k=>{const v=$(k+"_v");if(v)v.textContent=k==="cdn"?(S.cdn?S.cdn+" s":"No"):k==="lh"?(+S.lh).toFixed(2):S[k]+(UNITS[k]||"")});
+  RANGES.forEach(k=>{const v=$(k+"_v");if(v)v.textContent=k==="cdn"?(S.cdn?S.cdn+" s":"No"):k==="lh"?(+S.lh).toFixed(2):k==="capSize"?Math.round(S.capSize*100)+"%":S[k]+(UNITS[k]||"")});
   $("bv").textContent="Vel "+S.sp;
   const st=pr.style;txt.style.fontSize=S.fs+"px";st.setProperty("--fsz",S.fs+"px");st.setProperty("--lh",S.lh);st.setProperty("--tc",S.tc);st.setProperty("--hc",S.hc);st.setProperty("--ta",S.ta);
   st.setProperty("--by",S.by+"%");st.setProperty("--bh",Math.min(S.bh,100-S.by)+"%");st.setProperty("--bw",S.bw+"%");st.setProperty("--op",S.op/100);
@@ -312,7 +336,7 @@ function labels(){
   pr.classList.toggle("mx",S.mx);pr.classList.toggle("my",S.my);cam.classList.toggle("mir",S.front);
 }
 src.addEventListener("input",()=>{S.txt=src.value;stats();save()});
-RANGES.forEach(k=>$(k).addEventListener("input",e=>{S[k]=+e.target.value;labels();save()}));
+RANGES.forEach(k=>$(k).addEventListener("input",e=>{S[k]=+e.target.value;labels();save();if(k==="capSize")updateEditInfo()}));
 CHECKS.forEach(k=>$(k).addEventListener("change",e=>{S[k]=e.target.checked;labels();save();if(k==="xSil"||k==="xCap")updateEditInfo()}));
 SELECTS.forEach(k=>$(k).addEventListener("change",e=>{S[k]=e.target.value;labels();save();updateEditInfo()}));
 addEventListener("resize",labels);
@@ -482,16 +506,69 @@ src.addEventListener("input",projUI);
 /* ---- Cámara y grabación ---- */
 let stream=null,rec=null,chunks=[],recording=false,stopping=false,recStart=0,recDur=0,recTimer=0,wake=null,vidW=1080,vidH=1920,capPtr0=0;
 function pickMime(){if(!window.MediaRecorder)return"";const c=["video/mp4;codecs=avc1,mp4a","video/mp4","video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"];for(const m of c){try{if(MediaRecorder.isTypeSupported(m))return m}catch(e){}}return""}
+/* ---- Micrófono externo (USB, inalámbrico, Bluetooth) ---- */
+const EXT=/usb|bluetooth|wireless|inal[aá]mbric|headset|auricular|extern|dji|rode|hollyland|lark|boya|saramonic|comica|synco|wired|line/i;
+const INT=/speakerphone|built-?in|default|predeterminad|earpiece|internal|interno|bottom|top|back|front|altavoz/i;
+let MICS=[],micNow="";
+async function listMics(){try{const d=await navigator.mediaDevices.enumerateDevices();MICS=d.filter(x=>x.kind==="audioinput");}catch(e){MICS=[]}return MICS}
+const isExt=m=>m&&m.label&&EXT.test(m.label)&&!/earpiece/i.test(m.label)&&!(INT.test(m.label)&&!/usb|bluetooth/i.test(m.label));
+function pickMic(){
+  if(S.mic==="builtin")return MICS.find(m=>m.label&&!isExt(m)&&m.deviceId!=="default")||null;
+  if(S.mic==="auto")return MICS.find(isExt)||null;
+  return MICS.find(m=>m.deviceId===S.mic)||MICS.find(m=>S.micLabel&&m.label===S.micLabel)||MICS.find(isExt)||null;
+}
+function audioCons(){
+  const m=pickMic();const ext=m?isExt(m):false;const raw=ext&&S.micRaw;
+  const c={echoCancellation:!raw,noiseSuppression:!raw,autoGainControl:!raw};
+  if(m&&m.deviceId&&m.deviceId!=="default")c.deviceId={exact:m.deviceId};
+  return c;
+}
+async function fixAudio(st){
+  // Si al principio no había nombres de micrófonos (permiso nuevo), revisa de nuevo y cambia al externo
+  const tr=st&&st.getAudioTracks()[0];if(!tr)return st;
+  await listMics();const m=pickMic();
+  if(m&&tr.label!==m.label){
+    try{const a=await navigator.mediaDevices.getUserMedia({audio:audioCons()});const nt=a.getAudioTracks()[0];
+      st.removeTrack(tr);tr.stop();st.addTrack(nt)}catch(e){}
+  }
+  const t2=st.getAudioTracks()[0];micNow=t2?t2.label:"";
+  if(micNow){msg("Micrófono: "+micNow);setTimeout(()=>{if($("msg").textContent.startsWith("Micrófono"))msg("")},2500)}
+  return st;
+}
+function micInfoUI(){
+  const sel=$("micSel");const keep=S.mic;
+  sel.innerHTML='<option value="auto">Automático: usa el externo si está conectado</option><option value="builtin">Micrófono del celular</option>'+
+    MICS.filter(m=>m.label&&m.deviceId!=="default").map(m=>`<option value="${esc(m.deviceId)}">${esc(m.label)}${isExt(m)?" (externo)":""}</option>`).join("");
+  sel.value=[...sel.options].some(o=>o.value===keep)?keep:"auto";
+  const ext=MICS.filter(isExt);
+  let t=MICS.length?(ext.length?`Encontré tu micrófono externo: ${ext.map(m=>m.label).join(", ")}.`:"No encontré un micrófono externo. ")+` Micrófonos disponibles: ${MICS.map(m=>m.label||"sin nombre").join(", ")}.`:"No pude ver los micrófonos.";
+  if(APP&&AndroidApp.micInfo){try{const n=JSON.parse(AndroidApp.micInfo());t+=" El celular reconoce: "+(n.length?n.join(", "):"ninguno")+"."}catch(e){}}
+  if(!ext.length)t+=" Si tu receptor está conectado y no aparece, desconéctalo, espera 3 segundos, vuelve a conectarlo y toca «Buscar micrófonos» otra vez.";
+  $("micInfo").textContent=t;
+}
+$("micSel").onchange=e=>{S.mic=e.target.value;const m=MICS.find(x=>x.deviceId===S.mic);S.micLabel=m?m.label:"";save()};
+$("micScan").onclick=async()=>{
+  $("micInfo").textContent="Buscando…";
+  try{const s=await navigator.mediaDevices.getUserMedia({audio:true});s.getTracks().forEach(t=>t.stop())}catch(e){$("micInfo").textContent="Necesito permiso para usar el micrófono.";return}
+  await listMics();micInfoUI();
+};
+if(navigator.mediaDevices&&navigator.mediaDevices.addEventListener)navigator.mediaDevices.addEventListener("devicechange",async()=>{
+  await listMics();micInfoUI();
+  if(stream&&pr.classList.contains("on")&&!recording){await fixAudio(stream);if(actx){const v=voiceReady;stopVoice();stopAudio();startAudio(stream);if(v&&S.mode==="voz"){await startVoice();followTo(cur,true)}}}
+});
+
 async function startCamera(){
   stopCamera();msg("");
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){msg("Este navegador no permite usar la cámara.",true);return false}
   const v=S.hq?{width:{ideal:1920},height:{ideal:1080}}:{width:{ideal:1280},height:{ideal:720}};
-  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:S.front?"user":"environment",...v,frameRate:{ideal:30}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})}
+  await listMics();
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:S.front?"user":"environment",...v,frameRate:{ideal:30}},audio:audioCons()})}
   catch(e){msg("No pude abrir la cámara o el micrófono. Revisa los permisos y vuelve a intentar. ("+e.name+")",true);return false}
   cam.srcObject=stream;try{await cam.play()}catch(e){}
+  await fixAudio(stream);
   return true;
 }
-async function startMicOnly(){try{return await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}})}catch(e){return null}}
+async function startMicOnly(){try{await listMics();return await fixAudio(await navigator.mediaDevices.getUserMedia({audio:audioCons()}))}catch(e){return null}}
 function stopCamera(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}cam.srcObject=null}
 async function lockScreen(){try{if("wakeLock" in navigator)wake=await navigator.wakeLock.request("screen")}catch(e){}}
 function startRec(){
@@ -569,22 +646,45 @@ function trimEdges(L,dur){
   if(!sp.length)return[[0,dur]];
   return[[Math.max(0,sp[0][0]-0.25),Math.min(dur,sp[sp.length-1][0]+0.45)]];
 }
-function buildCues(cw,W,c0,dur){
-  const ws=cw.map(([i,s,e])=>({i,s,e})).filter(w=>w.e>0&&w.s<dur+1).sort((a,b)=>a.i-b.i);const out=[];let cc=null,prevI=c0-1;
+/* Palabras con tiempo: las palabras del guion que la voz confirmó, y las intermedias repartidas */
+function buildWords(cw,W,c0,dur){
+  const ws=cw.map(([i,s,e])=>({i,s,e})).filter(w=>w.e>0&&w.s<dur+1).sort((a,b)=>a.i-b.i);const out=[];let prevI=c0-1,prevE=null;
   for(const w of ws){
-    const text=W.slice(prevI+1,w.i+1).join(" ");prevI=w.i;
-    if(cc&&(cc.t.length+text.length+1>24||w.s-cc.e>0.7)){out.push(cc);cc=null}
-    if(!cc)cc={s:w.s,e:w.e,t:text};else{cc.t+=" "+text;cc.e=w.e}
-    if(/[.!?…:;]$/.test(W[w.i])||/,$/.test(W[w.i])&&cc.t.length>12){out.push(cc);cc=null}
+    const n=w.i-prevI;if(n<1)continue;
+    const st=Math.max(prevE===null?w.s-0.25*(n-1):prevE,w.s-0.3*(n-1));
+    const m=n-1,span=Math.max(0,w.s-st);
+    for(let j=1;j<=m;j++)out.push({t:W[prevI+j],s:st+span*(j-1)/m,e:st+span*j/m});
+    out.push({t:W[w.i],s:Math.max(0,w.s),e:w.e});prevI=w.i;prevE=w.e;
+  }
+  return out;
+}
+const CAPSTYLES=[
+  {id:"karaoke",name:"Karaoke",font:"CapMont",wt:900,up:true,f:0.075,n:3},
+  {id:"box",name:"Caja",font:"CapMont",wt:900,up:true,f:0.072,n:3},
+  {id:"pop",name:"Impacto",font:"CapAnton",wt:400,up:true,f:0.115,n:2},
+  {id:"comic",name:"Cómic",font:"CapBangers",wt:400,up:true,f:0.1,n:2},
+  {id:"neon",name:"Neón",font:"CapMont",wt:800,up:true,f:0.07,n:3},
+  {id:"clean",name:"Limpio",font:"CapMont",wt:700,up:false,f:0.055,n:6},
+  {id:"minimal",name:"Minimal",font:"CapMont",wt:600,up:false,f:0.05,n:5}];
+const capStyle=()=>CAPSTYLES.find(s=>s.id===S.capSty)||CAPSTYLES[0];
+function chunkWords(ws){
+  const st=capStyle();const N=S.capN==="auto"?st.n:S.capN==="frase"?7:+S.capN;const maxC=N<=2?16:N<=3?22:32;
+  const out=[];let cc=null;
+  for(const w of ws){
+    const t=w.t.replace(/\*/g,"");
+    if(cc&&(cc.w.length>=N||cc.len+t.length+1>maxC||w.s-cc.e>0.6)){out.push(cc);cc=null}
+    if(!cc)cc={s:w.s,e:w.e,w:[],len:0};
+    cc.w.push({t,s:w.s,e:w.e,emp:/\*/.test(w.t)});cc.e=w.e;cc.len+=t.length+1;
+    if(/[.!?…:;]$/.test(t)||(/,$/.test(t)&&cc.w.length>=2)){out.push(cc);cc=null}
   }
   if(cc)out.push(cc);
-  for(let i=0;i<out.length;i++){const n=out[i+1];out[i].e=Math.max(out[i].s+0.4,n?Math.min(out[i].e+0.35,n.s):out[i].e+0.5);out[i].s=Math.max(0,out[i].s)}
+  for(let i=0;i<out.length;i++){const n=out[i+1];out[i].e=Math.max(out[i].s+0.3,n?Math.min(out[i].e+0.3,n.s):out[i].e+0.5);out[i].t=out[i].w.map(x=>x.t).join(" ")}
   return out;
 }
 function analyze(t){
   const L=levelsOf(t);const {W}=tokens(P.parts[t.part]||"");
   const segs=(S.xSil&&L.length?silenceCuts(L,t.dur,parseFloat(S.silLvl),t.step):L.length?trimEdges(L,t.dur):[[0,t.dur]]);
-  const cues=buildCues(t.cw,W,t.c0,t.dur);
+  const cues=chunkWords(buildWords(t.cw,W,t.c0,t.dur));
   return{segs:segs.length?segs:[[0,t.dur]],cues};
 }
 function mapT(t,ks){let acc=0;for(const [a,b] of ks){if(t<a)return acc;if(t<=b)return acc+t-a;acc+=b-a}return acc}
@@ -633,7 +733,7 @@ function assemble(){
     if(items.length)fades.push(off);
     items.push({take:t.id,ext:t.ext,segs:a.segs,w:t.w,h:t.h});
     const mt=x=>off+mapT(x,a.segs);
-    for(const c of a.cues){const s=mt(c.s),e=mt(c.e);if(e-s>0.15)cues.push({s,e,t:c.t})}
+    for(const c of a.cues){const s=mt(c.s),e=mt(c.e);if(e-s>0.15)cues.push({s,e,t:c.t,w:c.w.map(x=>({t:x.t,s:mt(x.s),e:mt(x.e),emp:x.emp}))})}
     const kf=zoomPlan(a.segs,a.cues);
     zooms.push({t:off,z:kf.length?kf[0].z:1,m:"c"});
     for(const k of kf){const x=mt(k.t);if(x>off+0.01)zooms.push({t:x,z:k.z,m:k.m})}
@@ -641,7 +741,31 @@ function assemble(){
   }
   return{items,cues,zooms,fades,dur:off,raw};
 }
-const capText=t=>{t=t.replace(/\*/g,"");return S.capSty==="upper"?t.toUpperCase():t};
+const capText=t=>t.replace(/\*/g,"");
+/* Dibujo de subtítulos (vista previa; la app Android los dibuja igual en el video) */
+function capHTML(c,t,px){
+  const st=capStyle(),A=S.capCol;let a=-1;c.w.forEach((w,i)=>{if(t>=w.s)a=i});
+  const size=px*st.f*S.capSize;const sw=Math.max(1,size*0.08);
+  const outline=`${sw}px ${sw}px 0 #000,-${sw}px ${sw}px 0 #000,${sw}px -${sw}px 0 #000,-${sw}px -${sw}px 0 #000,0 ${sw}px 0 #000,0 -${sw}px 0 #000,${sw}px 0 0 #000,-${sw}px 0 0 #000`;
+  const base=`font-family:${st.font},Impact,sans-serif;font-weight:${st.wt};font-size:${size.toFixed(1)}px;`;
+  if(st.id==="clean")return`<div style="${base}"><span class="cl" style="background:rgba(0,0,0,.68);color:#fff">${esc(c.t)}</span></div>`;
+  return`<div style="${base}">`+c.w.map((w,i)=>{const act=i===a,past=i<a;let tx=esc(st.up?w.t.toUpperCase():w.t),css="";
+    if(st.id==="karaoke")css=`color:${act?A:"#fff"};text-shadow:${outline}`;
+    else if(st.id==="box")css=`color:#fff;text-shadow:${outline};${act?`background:${A};`:""}`;
+    else if(st.id==="pop")css=`color:${act?A:"#fff"};text-shadow:${outline};${act?"transform:scale(1.12);":""}`;
+    else if(st.id==="comic")css=`color:${act?"#fff":A};text-shadow:${outline};${act?"transform:scale(1.12) rotate(-2deg);":""}`;
+    else if(st.id==="neon")css=`color:${act?A:"#fff"};text-shadow:0 0 ${size*0.25}px ${A},0 0 ${size*0.5}px ${A}`;
+    else css=`color:${act||past?"#fff":"rgba(255,255,255,.7)"};text-shadow:0 ${size*0.05}px ${size*0.15}px rgba(0,0,0,.7)`;
+    return`<span class="cw" style="${css}">${tx}</span>`}).join(" ")+`</div>`;
+}
+const CAPCOLORS=["#ffd60a","#39ff14","#00e5ff","#ff3df2","#ff9f0a","#ff3b30"];
+function capStylesUI(){
+  const demo={w:[{t:"Así",s:0,e:1},{t:"se",s:0,e:1},{t:"ve",s:9,e:9}],t:"Así se ve"};
+  demo.w[1].s=0;$("capStyles").innerHTML=CAPSTYLES.map(st=>`<button data-s="${st.id}" class="${st.id===S.capSty?"on":""}"><span class="smp">${(()=>{const k=S.capSty;S.capSty=st.id;const sz=S.capSize;S.capSize=1;const r=capHTML(demo,0.5,1/st.f*19);S.capSty=k;S.capSize=sz;return r})()}</span><small>${st.name}</small></button>`).join("");
+  const sw=$("capColSw");sw.innerHTML=CAPCOLORS.map(c=>`<button style="background:${c}" data-c="${c}" class="${c===S.capCol?"on":""}" aria-label="Color ${c}"></button>`).join("");
+}
+$("capStyles").onclick=e=>{const b=e.target.closest("button");if(!b)return;S.capSty=b.dataset.s;save();capStylesUI();updateEditInfo()};
+$("capColSw").onclick=e=>{const c=e.target.dataset.c;if(!c)return;S.capCol=c;save();capStylesUI();updateEditInfo()};
 function srt(cs){const f=x=>{const ms=Math.round(x*1000),h=Math.floor(ms/3600000),m=Math.floor(ms/60000)%60,s=Math.floor(ms/1000)%60;return`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")},${String(ms%1000).padStart(3,"0")}`};
   return cs.map((c,i)=>`${i+1}\n${f(c.s)} --> ${f(c.e)}\n${capText(c.t)}\n`).join("\n")}
 
@@ -657,7 +781,7 @@ function openEditor(p){
   $("rv").classList.add("on");$("expBtn").disabled=false;$("pbar").style.display="none";
   $("expBtn").textContent=APP?"Exportar video editado":"Descargar toma elegida";
   $("saveOrig").style.display=APP?"":"none";
-  renderParts();updateEditInfo();preview(selPart,false);
+  capStylesUI();renderParts();updateEditInfo();preview(selPart,false);
 }
 function closeEditor(){$("rv").classList.remove("on");stopPreview();rvv.removeAttribute("src");rvv.load&&rvv.load()}
 function renderParts(){
@@ -684,8 +808,7 @@ function pvTick(){
   if(pv){const t=rvv.currentTime;
     rvv.style.transform=`scale(${zoomAt(pv.kf,t).toFixed(3)})`;
     const c=S.xCap&&pv.cues.find(c=>t>=c.s&&t<c.e);const el=$("cap");
-    if(c){const st=S.capSty==="yellow"?"color:#ffd60a;text-shadow:0 2px 6px #000":S.capSty==="upper"?"color:#fff;text-shadow:0 0 4px #000,0 2px 8px #000":"color:#fff;background:rgba(0,0,0,.65)";
-      el.innerHTML=`<span style="${st}">${esc(capText(c.t))}</span>`}else el.innerHTML="";
+    if(c){const fr=$("frame");const px=Math.min(fr.clientWidth,fr.clientHeight)||300;const hh=capHTML(c,t,px);if(el.dataset.h!==hh){el.innerHTML=hh;el.dataset.h=hh}}else if(el.innerHTML){el.innerHTML="";el.dataset.h=""}
     if(!rvv.paused){const g=pv.segs;
       if(!g.some(k=>t>=k[0]-0.05&&t<=k[1])){const n=g.find(k=>k[0]>t);
         if(n){try{rvv.currentTime=n[0]}catch(e){}}else if(t>g[g.length-1][1])endOfPart()}}
@@ -719,7 +842,7 @@ function updateEditInfo(){
   $("rvinfo").textContent=(n>1?`${rec} de ${n} partes grabadas · `:"")+`video final ≈ ${fmt(A.dur)}`+(A.raw-A.dur>0.5?` (grabaste ${fmt(A.raw)})`:"");
   $("silInfo").textContent=S.xSil?(A.raw-A.dur>0.5?`Se quitan ${fmt(A.raw-A.dur)} de pausas.`:"No encontré pausas largas para cortar."):"Solo se recorta el inicio y el final de cada toma.";
   $("capInfo").textContent=A.cues.length?`${A.cues.length} subtítulos generados a partir de tu voz.`:"Graba en modo «Sigue mi voz» para generar subtítulos automáticamente.";
-  ["xCap","capSty","capPos","srtBtn","srtCopy"].forEach(k=>$(k).disabled=!A.cues.length);
+  ["xCap","capPos","capN","srtBtn","srtCopy"].forEach(k=>$(k).disabled=!A.cues.length);
   $("cap").className=S.capPos==="top"?"top":S.capPos==="mid"?"mid":"";
   $("expInfo").textContent=APP?"Une las partes con los cortes, efectos y subtítulos, y lo guarda en tu galería.":"La unión de partes con efectos se hace en la app Android. Aquí puedes descargar cada toma.";
   if(pv&&pv.p===selPart)preview(selPart,!rvv.paused);
@@ -741,9 +864,9 @@ $("expBtn").onclick=async()=>{
   const sz=S.fmt==="9x16"?[sm,big]:S.fmt==="1x1"?[sm,sm]:S.fmt==="16x9"?[big,sm]:[even(A.items[0].w),even(A.items[0].h)];
   const ms=x=>Math.round(x*1000);
   const cfg={items:A.items.map(i=>({take:i.take,ext:i.ext,segs:i.segs.map(k=>[ms(k[0]),ms(k[1])])})),
-    cues:S.xCap?A.cues.map(c=>({s:ms(c.s),e:ms(c.e),t:capText(c.t)})):[],
+    cues:S.xCap?A.cues.map(c=>({s:ms(c.s),e:ms(c.e),w:c.w.map(x=>[x.t,ms(x.s),ms(x.e)])})):[],
     zooms:A.zooms.map(z=>({t:ms(z.t),z:+z.z.toFixed(3),m:z.m})),fades:S.trans==="fade"?A.fades.map(ms):[],
-    filter:S.filt,w:sz[0],h:sz[1],style:S.capSty,pos:S.capPos,scale:Math.min(sz[0],sz[1])/1080,name:fileName("-editado","mp4")};
+    filter:S.filt,w:sz[0],h:sz[1],style:S.capSty,color:S.capCol,size:S.capSize,font:capStyle().f,upper:capStyle().up,pos:S.capPos,name:fileName("-editado","mp4")};
   $("expBtn").textContent="Exportando…";$("pbar").style.display="block";$("pbar").firstChild.style.width="0";
   $("expInfo").textContent="Procesando en tu celular. No cierres la app.";
   AndroidApp.exportVideo(JSON.stringify(cfg));
@@ -807,6 +930,7 @@ if(!standalone&&!APP){const i=$("inst"),ios=/iphone|ipad|ipod/i.test(navigator.u
   i.style.display="block"}
 if(!APP&&"serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 markMulti();projUI();stats();labels();
+listMics().then(()=>{if(MICS.some(m=>m.label))micInfoUI()});
 }
 </script>
 </body>
