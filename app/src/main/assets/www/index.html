@@ -262,6 +262,12 @@ select{width:100%;min-height:44px;margin:6px 0 10px;border-radius:10px;border:1p
       <p id="silInfo"></p>
     </div>
     <div class="box">
+      <h3>Sonido</h3>
+      <select id="aud"><option value="voz">Mejorar voz: quita ruido de fondo y da claridad (recomendado)</option><option value="fuerte">Quitar ruido fuerte (calle, ventilador, aire)</option><option value="orig">Sonido original</option></select>
+      <div class="acts"><button id="abBtn">Escuchar original</button></div>
+      <p class="note">La vista previa da una idea; el resultado final, con la reducción de ruido completa, se aplica al exportar.</p>
+    </div>
+    <div class="box">
       <h3>Efectos</h3>
       <label class="ed-l" for="zoom">Zoom</label>
       <select id="zoom"><option value="auto">Automático: zoom en cortes, cambios de frase y frases con «!»</option><option value="punch">Zoom en cortes y cambios de frase</option><option value="slow">Acercamiento lento en cada parte</option><option value="none">Sin zoom</option></select>
@@ -285,6 +291,7 @@ select{width:100%;min-height:44px;margin:6px 0 10px;border-radius:10px;border:1p
       <label class="ed-l" for="capPos">Posición</label>
       <select id="capPos"><option value="bottom">Abajo</option><option value="mid">Centro</option><option value="top">Arriba</option></select>
       <p id="capInfo"></p>
+      <div class="acts"><button id="capGen">Generar subtítulos</button></div>
       <div class="acts"><button id="srtBtn">Guardar subtítulos .srt</button><button id="srtCopy">Copiar subtítulos</button></div>
     </div>
     <div class="box" id="expBox">
@@ -308,12 +315,12 @@ const $=id=>document.getElementById(id);
 const APP=!!(window.AndroidApp&&AndroidApp.isApp&&AndroidApp.isApp());
 const COLORS=["#ffffff","#ffd60a","#7cff6b","#5ac8fa","#ff9f0a","#ff6b9a"];
 const S={mode:"voz",sp:60,fs:44,lh:1.35,tc:"#ffffff",hc:"#ffd60a",ta:"left",by:0,bh:45,bw:100,op:55,gy:22,cdn:3,front:true,hq:true,mx:false,my:false,txt:"",
-  silLvl:"0.6",capSty:"karaoke",capCol:"#ffd60a",capN:"auto",capSize:1,capPos:"bottom",xSil:true,xCap:true,mic:"auto",micLabel:"",micRaw:true,multi:false,zoom:"auto",trans:"fade",filt:"none",fmt:"9x16"};
+  silLvl:"0.6",capSty:"karaoke",capCol:"#ffd60a",capN:"auto",capSize:1,capPos:"bottom",xSil:true,xCap:true,mic:"auto",micLabel:"",micRaw:true,aud:"voz",multi:false,zoom:"auto",trans:"fade",filt:"none",fmt:"9x16"};
 try{Object.assign(S,JSON.parse(localStorage.getItem("tp3")||localStorage.getItem("tp2")||"{}"))}catch(e){}
 if(!S.txt)S.txt="Hola a todos, bienvenidos.\n\nEste es un texto de ejemplo. Reemplázalo con tu propio guion.\n\nEn modo voz, el texto avanza mientras hablas y se detiene cuando haces una pausa.\n\nMira al lente de la cámara y habla con naturalidad.\n\n¡Mucho éxito con tu grabación!";
 const save=()=>{try{localStorage.setItem("tp3",JSON.stringify(S))}catch(e){}};
 const src=$("src"),pr=$("pr"),scr=$("scr"),txt=$("txt"),cam=$("cam"),box=$("box");
-const RANGES=["sp","fs","lh","by","bh","bw","op","gy","cdn","capSize"],CHECKS=["front","hq","mx","my","xSil","xCap","micRaw"],SELECTS=["ta","silLvl","capPos","capN","zoom","trans","filt","fmt"];
+const RANGES=["sp","fs","lh","by","bh","bw","op","gy","cdn","capSize"],CHECKS=["front","hq","mx","my","xSil","xCap","micRaw"],SELECTS=["ta","silLvl","capPos","capN","zoom","trans","filt","fmt","aud"];
 src.value=S.txt;RANGES.forEach(k=>$(k).value=S[k]);CHECKS.forEach(k=>$(k).checked=S[k]);SELECTS.forEach(k=>$(k).value=S[k]);
 const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")};
 const UNITS={fs:" px",by:"%",bh:"%",bw:"%",op:"%",gy:"%"};
@@ -690,7 +697,7 @@ function chunkWords(ws){
 function analyze(t){
   const L=levelsOf(t);const {W}=tokens(P.parts[t.part]||"");
   const segs=(S.xSil&&L.length?silenceCuts(L,t.dur,parseFloat(S.silLvl),t.step):L.length?trimEdges(L,t.dur):[[0,t.dur]]);
-  const cues=chunkWords(buildWords(t.cw,W,t.c0,t.dur));
+  const cues=chunkWords(t.fw&&t.fw.length?t.fw.map(([w,s,e])=>({t:w,s,e})):buildWords(t.cw,W,t.c0,t.dur));
   return{segs:segs.length?segs:[[0,t.dur]],cues};
 }
 function mapT(t,ks){let acc=0;for(const [a,b] of ks){if(t<a)return acc;if(t<=b)return acc+t-a;acc+=b-a}return acc}
@@ -788,6 +795,7 @@ function openEditor(p){
   $("expBtn").textContent=APP?"Exportar video editado":"Descargar toma elegida";
   $("saveOrig").style.display=APP?"":"none";
   capStylesUI();renderParts();updateEditInfo();preview(selPart,false);
+  if(S.xCap)genCaptions(false);
 }
 function closeEditor(){$("rv").classList.remove("on");stopPreview();rvv.removeAttribute("src");rvv.load&&rvv.load()}
 function renderParts(){
@@ -849,6 +857,8 @@ function updateEditInfo(){
   $("silInfo").textContent=S.xSil?(A.raw-A.dur>0.5?`Se quitan ${fmt(A.raw-A.dur)} de pausas.`:"No encontré pausas largas para cortar."):"Solo se recorta el inicio y el final de cada toma.";
   $("capInfo").textContent=A.cues.length?`${A.cues.length} subtítulos generados a partir de tu voz.`:"Graba en modo «Sigue mi voz» para generar subtítulos automáticamente.";
   ["xCap","capPos","capN","srtBtn","srtCopy"].forEach(k=>$(k).disabled=!A.cues.length);
+  if(!A.cues.length&&!capBusy)$("capInfo").textContent="Todavía no hay subtítulos. Tócalo para generarlos escuchando tus tomas (sin internet).";
+  $("capGen").textContent=A.cues.length?"Volver a generar subtítulos":"Generar subtítulos";$("capGen").disabled=capBusy;
   $("cap").className=S.capPos==="top"?"top":S.capPos==="mid"?"mid":"";
   $("expInfo").textContent=APP?"Une las partes con los cortes, efectos y subtítulos, y lo guarda en tu galería.":"La unión de partes con efectos se hace en la app Android. Aquí puedes descargar cada toma.";
   if(pv&&pv.p===selPart)preview(selPart,!rvv.paused);
@@ -872,7 +882,7 @@ $("expBtn").onclick=async()=>{
   const cfg={items:A.items.map(i=>({take:i.take,ext:i.ext,segs:i.segs.map(k=>[ms(k[0]),ms(k[1])])})),
     cues:S.xCap?A.cues.map(c=>({s:ms(c.s),e:ms(c.e),w:c.w.map(x=>[x.t,ms(x.s),ms(x.e)])})):[],
     zooms:A.zooms.map(z=>({t:ms(z.t),z:+z.z.toFixed(3),m:z.m})),fades:S.trans==="fade"?A.fades.map(ms):[],
-    filter:S.filt,w:sz[0],h:sz[1],style:S.capSty,color:S.capCol,size:S.capSize,font:capStyle().f,upper:capStyle().up,pos:S.capPos,name:fileName("-editado","mp4")};
+    audio:S.aud==="orig"?-1:S.aud==="fuerte"?1:0.6,filter:S.filt,w:sz[0],h:sz[1],style:S.capSty,color:S.capCol,size:S.capSize,font:capStyle().f,upper:capStyle().up,pos:S.capPos,name:fileName("-editado","mp4")};
   $("expBtn").textContent="Exportando…";$("pbar").style.display="block";$("pbar").firstChild.style.width="0";
   $("expInfo").textContent="Procesando en tu celular. No cierres la app.";
   AndroidApp.exportVideo(JSON.stringify(cfg));
@@ -887,6 +897,78 @@ $("shareBtn").onclick=async()=>{
   const t=takeOf(selPart);if(!t||!BL[t.id])return;const f=new File([BL[t.id]],fileName("",t.ext),{type:t.mime});
   if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:"Mi video"});return}catch(e){if(e.name==="AbortError")return}}
   download(takeURL(t),fileName("",t.ext))};
+
+/* ---- Subtítulos después de grabar (Vosk, sin internet) ---- */
+let capBusy=false;
+async function getModel(){await loadScript("vosk.js");if(!model){const r=await fetch("model.tgz");if(!r.ok)throw new Error("Falta el modelo de voz");model=await Vosk.createModel(URL.createObjectURL(await r.blob()))}return model}
+async function takeAudio(t){
+  let blob=BL[t.id];if(!blob){const u=takeURL(t);if(!u)throw new Error("la toma aún se está guardando");blob=await (await fetch(u)).blob()}
+  const ac=new OfflineAudioContext(1,1,16000);const buf=await ac.decodeAudioData(await blob.arrayBuffer());
+  return buf.getChannelData(0);
+}
+function recognize(d,grammar,onProg){return new Promise(async(ok)=>{
+  const sr=16000,rec=grammar?new model.KaldiRecognizer(sr,grammar):new model.KaldiRecognizer(sr);rec.setWords(true);
+  const C=8000,n=Math.ceil(d.length/C);let ev=0;const words=[];let fin=false;
+  const done=()=>{if(!fin&&ev>=n+1){fin=true;try{rec.remove()}catch(e){}ok(words)}};
+  rec.on("result",e=>{ev++;((e.result&&e.result.result)||[]).forEach(w=>words.push(w));onProg(Math.min(1,ev/(n+1)));done()});
+  rec.on("partialresult",()=>{ev++;if(ev%10===0)onProg(Math.min(1,ev/(n+1)));done()});
+  for(let i=0,k=0;i<d.length;i+=C,k++){rec.acceptWaveformFloat(d.subarray(i,i+C),sr);if(k%25===0)await new Promise(r=>setTimeout(r))}
+  rec.retrieveFinalResult();
+  setTimeout(()=>{if(!fin){fin=true;try{rec.remove()}catch(e){}ok(words)}},Math.max(60000,d.length/sr*4000));
+})}
+async function transcribeTake(t,label){
+  const {W,NW}=tokens(P.parts[t.part]||"");
+  const prog=f=>$("capInfo").textContent=`${label}… ${Math.round(f*100)}%`;
+  prog(0);const d=await takeAudio(t);await getModel();
+  const vocab=[...new Set(W.map(gword).filter(Boolean))];vocab.push("[unk]");
+  const ws=await recognize(d,JSON.stringify(vocab),f=>prog(f*0.9));
+  const cw=[];let ptr=0;
+  for(const w of ws){const n=norm(w.word);if(!n||n==="unk")continue;
+    for(let k=ptr;k<Math.min(NW.length,ptr+12);k++)if(eq(n,NW[k])){cw.push([k,+w.start.toFixed(3),+w.end.toFixed(3)]);ptr=k+1;break}}
+  if(NW.length&&cw.length>=NW.length*0.3){t.cw=cw;t.c0=0;t.fw=null}
+  else{ // Hablaste distinto al guion: transcribe libre
+    const fw=await recognize(d,null,f=>prog(0.5+f*0.5));
+    t.fw=fw.filter(w=>w.word&&w.word!=="[unk]").map(w=>[w.word,+w.start.toFixed(3),+w.end.toFixed(3)]);t.cw=[];
+  }
+  t.tx=1;saveP();
+}
+async function genCaptions(force){
+  if(capBusy)return;
+  const need=P.parts.map((_,p)=>takeOf(p)).filter(t=>t&&(force||(!t.tx&&!(t.fw&&t.fw.length)&&t.cw.length<tokens(P.parts[t.part]||"").NW.length*0.3)));
+  if(!need.length){updateEditInfo();return}
+  capBusy=true;$("capGen").disabled=true;
+  try{
+    for(let i=0;i<need.length;i++){const t=need[i];if(APP&&!t.ok&&UP[t.id])try{await UP[t.id]}catch(e){}
+      await transcribeTake(t,need.length>1?`Generando subtítulos de la parte ${t.part+1}`:"Generando subtítulos")}
+  }catch(e){$("capInfo").textContent="No pude generar los subtítulos: "+e.message}
+  capBusy=false;updateEditInfo();if(pv)preview(selPart,false);
+}
+$("capGen").onclick=()=>genCaptions(true);
+
+/* ---- Vista previa del sonido mejorado ---- */
+let pa=null,abOrig=false;
+function audioGraph(){
+  if(pa)return pa;
+  try{const ctx=new (window.AudioContext||window.webkitAudioContext)();const src=ctx.createMediaElementSource(rvv);
+    const hp=ctx.createBiquadFilter();hp.type="highpass";hp.frequency.value=100;
+    const ls=ctx.createBiquadFilter();ls.type="lowshelf";ls.frequency.value=220;ls.gain.value=-2.5;
+    const pk=ctx.createBiquadFilter();pk.type="peaking";pk.frequency.value=3200;pk.Q.value=1;pk.gain.value=3.5;
+    const hs=ctx.createBiquadFilter();hs.type="highshelf";hs.frequency.value=9500;hs.gain.value=2;
+    const cp=ctx.createDynamicsCompressor();cp.threshold.value=-24;cp.ratio.value=3;cp.attack.value=0.01;cp.release.value=0.18;cp.knee.value=6;
+    const mk=ctx.createGain();mk.gain.value=1.8;
+    hp.connect(ls);ls.connect(pk);pk.connect(hs);hs.connect(cp);cp.connect(mk);mk.connect(ctx.destination);
+    pa={ctx,src,hp,dest:ctx.destination};
+  }catch(e){pa={err:1}}
+  return pa;
+}
+function routeAudio(){
+  const g=audioGraph();if(g.err)return;try{g.src.disconnect()}catch(e){}
+  if(S.aud==="orig"||abOrig)g.src.connect(g.dest);else{g.hp.frequency.value=S.aud==="fuerte"?130:100;g.src.connect(g.hp)}
+  if(g.ctx.state==="suspended")g.ctx.resume();
+}
+rvv.addEventListener("play",routeAudio);
+$("aud").addEventListener("change",()=>{if(pa)routeAudio()});
+$("abBtn").onclick=()=>{abOrig=!abOrig;$("abBtn").textContent=abOrig?"Escuchar mejorado":"Escuchar original";routeAudio();if(rvv.paused)rvv.play().catch(()=>{})};
 
 /* ---- Entrar / salir ---- */
 function partInfo(){const n=P.parts.length,k=takesOf(curPart).length;$("pinfo").textContent=`Parte ${curPart+1} de ${n}`+(k?` · ${k} toma${k>1?"s":""}`:"");pr.classList.toggle("multi",n>1)}

@@ -327,6 +327,11 @@ public class MainActivity extends Activity {
             JSONArray cj = o.optJSONArray("cues");
             if (cj != null && cj.length() > 0) fx.add(captionEffect(o, cj, w, h));
 
+            // Mejora de voz (quitar ruido de fondo, claridad, volumen parejo)
+            final List<AudioProcessor> afx = new ArrayList<>();
+            double audio = o.optDouble("audio", 0.6);
+            if (audio >= 0) afx.add(new VoiceProcessor((float) audio));
+
             // Tomas que hay que preparar (convertir a MP4 con índice para poder cortarlas)
             final LinkedHashMap<String, File> src = new LinkedHashMap<>();
             for (int i = 0; i < items.length(); i++) {
@@ -345,7 +350,7 @@ public class MainActivity extends Activity {
             normalizeNext(todo, 0, src, () -> {
                 try {
                     step = steps;
-                    run(compose(items, w, h, fx), out, () -> {
+                    run(compose(items, w, h, fx, afx), out, () -> {
                         try {
                             lastUri = saveToGallery(out, name, "video/mp4");
                             lastMime = "video/mp4";
@@ -381,7 +386,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    private Composition compose(JSONArray items, int w, int h, List<Effect> fx) throws Exception {
+    private Composition compose(JSONArray items, int w, int h, List<Effect> fx, List<AudioProcessor> afx) throws Exception {
         List<EditedMediaItem> list = new ArrayList<>();
         for (int i = 0; i < items.length(); i++) {
             JSONObject it = items.getJSONObject(i);
@@ -408,7 +413,7 @@ public class MainActivity extends Activity {
         }
         if (list.isEmpty()) throw new Exception("no quedó ningún tramo con voz");
         return new Composition.Builder(EditedMediaItemSequence.withAudioAndVideoFrom(list))
-                .setEffects(new Effects(new ArrayList<AudioProcessor>(), fx))
+                .setEffects(new Effects(afx, fx))
                 .build();
     }
 

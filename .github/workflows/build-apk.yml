@@ -52,7 +52,7 @@ jobs:
           name: Teleprompter 3.0.${{ github.run_number }}
           body: |
             Descarga **Teleprompter.apk** desde el celular e instálalo.
-            Novedades: subtítulos estilo redes (7 estilos palabra por palabra), selección de micrófono externo (USB, inalámbrico, Bluetooth), grabación por partes y edición con efectos.
+            Novedades: mejora de voz (quita ruido de fondo, claridad y volumen parejo), subtítulos generados después de grabar, micrófono USB, 7 estilos de subtítulos.
           files: Teleprompter.apk
           make_latest: true
 
