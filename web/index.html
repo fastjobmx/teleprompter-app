@@ -517,8 +517,13 @@ function pickMic(){
   if(S.mic==="auto")return MICS.find(isExt)||null;
   return MICS.find(m=>m.deviceId===S.mic)||MICS.find(m=>S.micLabel&&m.label===S.micLabel)||MICS.find(isExt)||null;
 }
+/* Micrófonos que ve Android directamente (el navegador interno no muestra los USB) */
+function nativeMics(){if(!(APP&&AndroidApp.micInfo))return[];try{const a=JSON.parse(AndroidApp.micInfo());return a.map(x=>typeof x==="string"?{name:x,ext:!/integrado|celular/i.test(x)}:x)}catch(e){return[]}}
+const nativeExt=()=>nativeMics().find(m=>m.ext)||null;
 function audioCons(){
-  const m=pickMic();const ext=m?isExt(m):false;const raw=ext&&S.micRaw;
+  const m=pickMic();const nx=S.mic!=="builtin"?nativeExt():null;
+  const ext=m?isExt(m):!!nx;const raw=ext&&S.micRaw;
+  if(APP&&AndroidApp.routeExternal)try{AndroidApp.routeExternal(!!(ext||nx))}catch(e){}
   const c={echoCancellation:!raw,noiseSuppression:!raw,autoGainControl:!raw};
   if(m&&m.deviceId&&m.deviceId!=="default")c.deviceId={exact:m.deviceId};
   return c;
@@ -532,6 +537,7 @@ async function fixAudio(st){
       st.removeTrack(tr);tr.stop();st.addTrack(nt)}catch(e){}
   }
   const t2=st.getAudioTracks()[0];micNow=t2?t2.label:"";
+  const nx=S.mic!=="builtin"?nativeExt():null;if(nx&&!(m&&isExt(m)))micNow=nx.name;
   if(micNow){msg("Micrófono: "+micNow);setTimeout(()=>{if($("msg").textContent.startsWith("Micrófono"))msg("")},2500)}
   return st;
 }
@@ -540,10 +546,10 @@ function micInfoUI(){
   sel.innerHTML='<option value="auto">Automático: usa el externo si está conectado</option><option value="builtin">Micrófono del celular</option>'+
     MICS.filter(m=>m.label&&m.deviceId!=="default").map(m=>`<option value="${esc(m.deviceId)}">${esc(m.label)}${isExt(m)?" (externo)":""}</option>`).join("");
   sel.value=[...sel.options].some(o=>o.value===keep)?keep:"auto";
-  const ext=MICS.filter(isExt);
-  let t=MICS.length?(ext.length?`Encontré tu micrófono externo: ${ext.map(m=>m.label).join(", ")}.`:"No encontré un micrófono externo. ")+` Micrófonos disponibles: ${MICS.map(m=>m.label||"sin nombre").join(", ")}.`:"No pude ver los micrófonos.";
-  if(APP&&AndroidApp.micInfo){try{const n=JSON.parse(AndroidApp.micInfo());t+=" El celular reconoce: "+(n.length?n.join(", "):"ninguno")+"."}catch(e){}}
-  if(!ext.length)t+=" Si tu receptor está conectado y no aparece, desconéctalo, espera 3 segundos, vuelve a conectarlo y toca «Buscar micrófonos» otra vez.";
+  const ext=MICS.filter(isExt),nat=nativeMics(),nx=nat.filter(m=>m.ext);
+  let t;
+  if(ext.length||nx.length)t=`Encontré tu micrófono externo: ${(nx.length?nx.map(m=>m.name):ext.map(m=>m.label)).join(", ")}. La app lo usa automáticamente y graba sin filtros de ruido.`;
+  else t=`No encontré un micrófono externo. ${nat.length?"El celular solo ve: "+nat.map(m=>m.name).join(", ")+".":""} Si tu receptor está conectado, desconéctalo, espera 3 segundos, vuelve a conectarlo y toca «Buscar micrófonos» otra vez.`;
   $("micInfo").textContent=t;
 }
 $("micSel").onchange=e=>{S.mic=e.target.value;const m=MICS.find(x=>x.deviceId===S.mic);S.micLabel=m?m.label:"";save()};

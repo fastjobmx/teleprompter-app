@@ -208,6 +208,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        try { if (Build.VERSION.SDK_INT >= 31) ((AudioManager) getSystemService(Context.AUDIO_SERVICE)).clearCommunicationDevice(); } catch (Exception ignored) { }
         if (transformer != null) transformer.cancel();
         if (web != null) web.destroy();
         super.onDestroy();
@@ -768,7 +769,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean hasShareable() { return lastUri != null; }
 
-        /** Lista de micrófonos que Android reconoce (para diagnóstico). */
+        /** Micrófonos que Android reconoce: [{name, ext}] (ext = externo: USB, Bluetooth o cable). */
         @JavascriptInterface
         public String micInfo() {
             JSONArray a = new JSONArray();
@@ -776,24 +777,45 @@ public class MainActivity extends Activity {
                 AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
                 for (AudioDeviceInfo d : am.getDevices(AudioManager.GET_DEVICES_INPUTS)) {
                     String t;
+                    boolean ext = true;
                     switch (d.getType()) {
-                        case AudioDeviceInfo.TYPE_BUILTIN_MIC: t = "micrófono integrado"; break;
-                        case AudioDeviceInfo.TYPE_USB_DEVICE: t = "USB"; break;
-                        case AudioDeviceInfo.TYPE_USB_HEADSET: t = "USB (headset)"; break;
-                        case AudioDeviceInfo.TYPE_USB_ACCESSORY: t = "USB (accesorio)"; break;
-                        case AudioDeviceInfo.TYPE_WIRED_HEADSET: t = "cable/jack"; break;
+                        case AudioDeviceInfo.TYPE_BUILTIN_MIC: t = "Micrófono del celular"; ext = false; break;
+                        case AudioDeviceInfo.TYPE_USB_DEVICE:
+                        case AudioDeviceInfo.TYPE_USB_HEADSET:
+                        case AudioDeviceInfo.TYPE_USB_ACCESSORY: t = "USB"; break;
+                        case AudioDeviceInfo.TYPE_WIRED_HEADSET: t = "Micrófono de cable"; break;
                         case AudioDeviceInfo.TYPE_BLUETOOTH_SCO: t = "Bluetooth"; break;
-                        case AudioDeviceInfo.TYPE_TELEPHONY: continue;
-                        default: t = "tipo " + d.getType();
+                        case 26: t = "Bluetooth LE"; break;
+                        default: continue;
                     }
                     CharSequence n = d.getProductName();
-                    String s = t + (n != null && n.length() > 0 && !n.toString().equals(Build.MODEL) ? " (" + n + ")" : "");
+                    String name = ext && n != null && n.length() > 0 && !n.toString().equals(Build.MODEL) ? t + " (" + n + ")" : t;
                     boolean dup = false;
-                    for (int i = 0; i < a.length(); i++) if (a.optString(i).equals(s)) dup = true;
-                    if (!dup) a.put(s);
+                    for (int i = 0; i < a.length(); i++) if (a.optJSONObject(i).optString("name").equals(name)) dup = true;
+                    if (!dup) a.put(new JSONObject().put("name", name).put("ext", ext));
                 }
             } catch (Exception ignored) { }
             return a.toString();
+        }
+
+        /** Pide a Android usar el micrófono externo (Android 12+). on=false vuelve al del celular. */
+        @JavascriptInterface
+        public String routeExternal(boolean on) {
+            try {
+                AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                if (Build.VERSION.SDK_INT >= 31) {
+                    if (!on) { am.clearCommunicationDevice(); return "ok"; }
+                    int[] pref = {AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                            26, AudioDeviceInfo.TYPE_BLUETOOTH_SCO};
+                    for (int type : pref)
+                        for (AudioDeviceInfo d : am.getAvailableCommunicationDevices())
+                            if (d.getType() == type) return am.setCommunicationDevice(d) ? "ok" : "rechazado";
+                    return "sin dispositivo";
+                }
+                return "no disponible";
+            } catch (Exception e) {
+                return "error";
+            }
         }
 
         @JavascriptInterface
